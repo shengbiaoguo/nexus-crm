@@ -76,6 +76,25 @@ test('real MySQL tables, types, migration checksum, RESTRICT FKs and actor CHECK
   assert.ok(migration[0]?.finished_at);
 });
 
+test('all application table defaults and character columns use the agreed database collation', async () => {
+  const tables = await client.$queryRaw<
+    Array<{ collation: string }>
+  >`SELECT TABLE_COLLATION AS collation FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME <> '_prisma_migrations'`;
+  assert.equal(tables.length, 10);
+  assert.ok(tables.every((row) => row.collation === 'utf8mb4_0900_ai_ci'));
+  const columns = await client.$queryRaw<
+    Array<{ collation: string }>
+  >`SELECT COLLATION_NAME AS collation FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME <> '_prisma_migrations' AND COLLATION_NAME IS NOT NULL`;
+  assert.ok(columns.length > 0);
+  assert.ok(columns.every((row) => row.collation === 'utf8mb4_0900_ai_ci'));
+  const sql = await readFile('prisma/migrations/20261030020831_align_m0_collation/migration.sql');
+  const migration = await client.$queryRaw<
+    Array<{ checksum: string; finished_at: Date | null }>
+  >`SELECT checksum, finished_at FROM _prisma_migrations WHERE migration_name='20261030020831_align_m0_collation'`;
+  assert.equal(migration[0]?.checksum, createHash('sha256').update(sql).digest('hex'));
+  assert.ok(migration[0]?.finished_at);
+});
+
 test('identity uniqueness, FK protection and historical disabled actors; fixture always rolls back', async () => {
   await rollbackFixture(async (tx) => {
     const suffix = randomUUID();

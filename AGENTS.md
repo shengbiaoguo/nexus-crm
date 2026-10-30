@@ -16,6 +16,7 @@
 ## Data and security
 
 - Schema evolves only through reviewed Prisma Migration SQL committed with schema. Development: migrate dev against dedicated local databases. Production: migrate deploy; never db push/migrate reset/migrate dev, manual untracked ALTER or fabricated migrations.
+- Application tables and character columns explicitly use utf8mb4 / utf8mb4_0900_ai_ci (user decision 2026-10-30). Review generated SQL before applying; Prisma's historical init_m0 remains unchanged and is followed by align_m0_collation. Do not alter _prisma_migrations collation. New CREATE TABLE migrations must explicitly declare the agreed collation; database defaults alone are insufficient.
 - Expand → Backfill → Contract; test new and historical databases, backup/restore and compatibility. Never assume automatic down migration.
 - Prisma 7: prisma.config.ts holds datasource URL, prisma-client generator has explicit output, runtime uses matching official @prisma/adapter-mariadb. Do not put legacy URL config in datasource schema.
 - No production credentials or real development secrets in Git, shared packages, VITE_* or logs. Only placeholders in examples; .env files and generated clients ignored.

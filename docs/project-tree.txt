@@ -31,6 +31,8 @@ nexus-crm/
 │       │   ├── migrations/
 │       │   │   ├── 20261030014538_init_m0/
 │       │   │   │   └── migration.sql
+│       │   │   ├── 20261030020831_align_m0_collation/
+│       │   │   │   └── migration.sql
 │       │   │   ├── migration_lock.toml
 │       │   │   └── README.md
 │       │   └── schema.prisma
@@ -84,6 +86,7 @@ nexus-crm/
 │   ├── project-tree.txt
 │   ├── requirements.md
 │   └── reviews/
+│       ├── m0-collation-alignment.md
 │       ├── m0-design-fix-summary.md
 │       └── m0-implementation.md
 ├── eslint.config.mjs
@@ -104,6 +107,7 @@ nexus-crm/
 ├── prettier.config.mjs
 ├── README.md
 ├── scripts/
+│   ├── check-collation.mjs
 │   ├── db-inspect.mjs
 │   ├── dev-api.mjs
 │   ├── init-env.mjs

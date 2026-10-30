@@ -69,6 +69,8 @@ pnpm services:check
 
 Prisma CLI/Client/MySQL 官方适配器均锁定 7.10.1。prisma.config.ts 配置连接 URL，schema 使用 mysql provider 和显式 prisma-client 输出。首份 `20261030014538_init_m0` 包含十张 M0 表，已在确认空的本地库应用。详见 [SQL 审查与实施记录](docs/reviews/m0-implementation.md)。
 
+应用表及字符列通过后续 `20261030020831_align_m0_collation` 统一为 `utf8mb4_0900_ai_ci`，与数据库默认值一致；不修改已应用的 init_m0。后续新表必须在应用前审查 SQL，显式指定该字符集/排序规则，不能依赖 Prisma 自动读取数据库默认值；CI 已加入声明检查。Prisma 自身的 _prisma_migrations 不在应用表转换范围。详见 [排序规则修订记录](docs/reviews/m0-collation-alignment.md)。
+
 后续 Schema 变更先 validate，再使用 `pnpm prisma:migrate:dev --create-only --name <change>` 生成 SQL，审查后再应用。生产使用 `pnpm prisma:migrate:deploy`。Schema 和真实生成的迁移 SQL 一同评审提交。禁止 db push、重置历史或承诺自动 down migration。详见 [ADR-004](docs/adr/0004-prisma-migration-strategy.md)。
 
 ```sh
