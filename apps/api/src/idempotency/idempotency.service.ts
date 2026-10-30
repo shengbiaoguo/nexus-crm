@@ -25,6 +25,8 @@ type Authorize = (
   phase: 'preflight' | 'transaction',
 ) => Promise<void>;
 export interface IdempotentCommand {
+  /** Server-defined creation command; entityId must be new and the persisted scalar result must contain id. */
+  createsEntity?: boolean;
   userLocks?: readonly UserLock[];
   identity: AccessIdentity;
   key: unknown;
@@ -75,6 +77,8 @@ export class IdempotencyService {
   async execute(input: IdempotentCommand): Promise<IdempotencyResult> {
     const dto = freeze(JSON.parse(canonicalJson(input.dto)) as JsonValue);
     const command = prepareCommand({ ...input, actorId: input.identity.sub, dto });
+    if (input.createsEntity && command.entityId !== 'new')
+      throw new TypeError('Creation target must be new');
     input = {
       ...input,
       identity: { ...input.identity },
@@ -117,7 +121,12 @@ export class IdempotencyService {
           await input.authorize(tx, 'transaction');
           if (record) {
             const replay = this.store.replay(record, command);
-            await this.replayAudit(tx, command, attemptId);
+            await this.replayAudit(
+              tx,
+              command,
+              attemptId,
+              this.resultRef(command, input, replay.body),
+            );
             readyToCommit = true;
             return replay;
           }
@@ -137,12 +146,16 @@ export class IdempotencyService {
           enteredBusiness = true;
           const outcome = await input.execute(tx, dto);
           const body = responseSnapshot(outcome.body, input.responseFields, outcome.httpStatus);
+          if (input.createsEntity && outcome.httpStatus !== 201)
+            throw new TypeError('Creation must return 201');
+          const resultRef = this.resultRef(command, input, body);
           await this.audit.recordSuccess(tx, {
             ...outcome.audit,
             ...this.context(command),
             action: command.operationId,
             attemptId,
-            resultRef: this.resultRef(command),
+            resultRef,
+            ...(input.createsEntity ? { createdEntityId: String(body!.id) } : {}),
           });
           await this.store.finish(tx, command, outcome.httpStatus, body);
           readyToCommit = true;
@@ -197,7 +210,12 @@ export class IdempotencyService {
           if (record) {
             const replay = this.store.replay(record, command);
             if (attempt.status === 'STARTED' || attempt.status === 'UNKNOWN')
-              await this.replayAudit(tx, command, attemptId);
+              await this.replayAudit(
+                tx,
+                command,
+                attemptId,
+                this.resultRef(command, input, replay.body),
+              );
             return { replay };
           }
           // Owning the same unique key proves the original transaction no longer holds it.
@@ -289,14 +307,31 @@ export class IdempotencyService {
       requestHash: command.requestHash,
     };
   }
-  private resultRef(command: PreparedCommand) {
-    return `${command.entityType}:${command.entityId}`;
+  private resultRef(
+    command: PreparedCommand,
+    input: IdempotentCommand,
+    body: Record<string, unknown> | null,
+  ) {
+    const id = input.createsEntity ? body?.id : command.entityId;
+    if (
+      input.createsEntity &&
+      (typeof id !== 'string' ||
+        !/^[1-9][0-9]{0,19}$/.test(id) ||
+        BigInt(id) > 18446744073709551615n)
+    )
+      throw new TypeError('Created result requires a canonical unsigned ID');
+    return `${command.entityType}:${String(id)}`;
   }
-  private replayAudit(tx: Prisma.TransactionClient, command: PreparedCommand, attemptId: string) {
+  private replayAudit(
+    tx: Prisma.TransactionClient,
+    command: PreparedCommand,
+    attemptId: string,
+    resultRef: string,
+  ) {
     return this.audit.recordReplay(tx, {
       ...this.context(command),
       attemptId,
-      resultRef: this.resultRef(command),
+      resultRef,
     });
   }
 }

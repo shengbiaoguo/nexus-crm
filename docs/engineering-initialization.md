@@ -116,3 +116,23 @@ Compose 是可选隔离本地服务配置（MySQL 8.4.7、Redis 8.2.2），默�
 - 冻结锁安装首轮因无 TTY 中止；交互重试在重建依赖目录时长时间无输出，停止后将原目录移至忽略的 `.tools/m0-node-modules-backup`。受限环境离线缓存不完整且普通网络请求 EACCES；获批权限重试后成功复用缓存的 477 个锁定包。初次类型检查发现 Swagger 内部类型路径不属于公开 exports，改为公共入口类型导入后通过；未放宽 strict 或 lint。
 - 最终实际通过：冻结锁安装、Prisma generate/validate、lint、typecheck、build、`test:m0`（API 普通测试 24 / Admin 1 / 真实 MySQL 31，全部零失败零跳过）、编译后 API smoke、OpenAPI 导出和迁移 SQL 静态审查。本地 MySQL 8.4.13 SELECT VERSION() 与 Redis PING 通过；无自动建库、启动服务或本地迁移操作。
 - 边界：只验收已有 M0 能力，不宣称负责人初始化、自授防护/最后负责人管理写接口或后台核对作业已实现。未执行全新库/历史库升级、备份恢复、真实断网/进程崩溃、生产验证和远端 CI。保留 Admin 既有超过 500 kB 的产物提示及 @scarf/scarf 构建脚本忽略提示。
+
+## 2026-10-30：M1 开发准备（仅文档）
+
+- 阅读项目规则、需求/API/权限/数据模型、全部 ADR、M0 Prisma Schema、NestJS 模块及现有数据库/集成测试；新增 [M1 实施计划](plans/m1-implementation-plan.md)，含前置核查、14 个候选模型、分批增量 Migration、追踪矩阵、18 项任务的依赖/验收/测试与 53～82 人日估算。只补文档，不注册 Controller、不新增业务代码、Schema、Migration 或真实身份数据。
+- 定点补充 API §9、数据模型 §11、权限 §9、需求 §13.1 与审查修订记录，修正 follow_ups 的 M1/M3 阶段不一致及“下一步生成初始迁移”的过时说明。保留历史 ADR 和已应用迁移；BR-001～010 原文逐行与当前 HEAD 核对一致。
+- 识别 M0 业务授权范围/写锁、受控身份准备、后台核对、新建自增实体与幂等审计目标的适配缺口，以及 M0 整库十表断言在新模型引入时的演进需求；逐项设为前置任务。未把已有 M0 测试视为这些能力已经完成。
+- DC-001 的设计基线仍有效，M1 销售对象与写入实现尚未验收；DC-005/010 技术契约补齐但未关闭，业务未决事项 D-01～08 明确登记，没有选择审批门槛、税折/舍入、有效期、证据形式或批量交接语义的默认答案。本轮未推翻现行 Accepted ADR，无需新增 superseding ADR。
+- 实际通过：冻结锁离线安装（复用此前安装所需的缓存访问权限）、lint、typecheck、build、test:m0（API 普通 24 / Admin 1 / MySQL 31，零失败零跳过）、编译后 API smoke、OpenAPI 导出。文档检查通过 BR 原文、本次文档 32 个相对文件链接、围栏、18 项依赖无环及人日求和；临时校验脚本位于忽略的 artifacts，不作为生产或业务代码提交。
+- 本轮没有运行任何新 Migration、建库/系统服务安装、账号 bootstrap、M1 业务测试、备份恢复、生产验证或远端 CI；既有 Admin 大包提示与 @scarf/scarf 脚本忽略提示仍存在。下一轮须明确选择任务并先满足对应门禁，本轮到计划交付即停止。
+
+## 2026-10-30：M1 前置基础能力修复
+
+- 用户授权仅修复五项前置缺口；复用现有 NestJS/Prisma/Authorization/Audit/Idempotency。新增固定销售 action/scope Policy、同事务对象 guard 及身份锁协调；新增首位 business_owner 的安全 Bootstrap、有界 command_attempts 核对入口和 createsEntity 审计适配。未创建 Customer/Order 或其他 M1 业务模型/Controller，无 schema、Migration、依赖版本或 Accepted ADR 决策变更；原有未提交的 M1 准备文档修订保留。
+- 销售对象由服务端 resolver 使用传入 tx 读取权威根，授权前不调用数据读取回调；TEAM 查询真实用户/有效部门关系，停用路径和环路失败关闭。WriteLockService 只允许注册的交互事务，用户→角色→部门按数值 ID 取锁，重验目标集合；不伪造不存在的订单行锁。订单适用操作、后续客户/订单/子记录接入边界详见 [基础能力与文件清单](m1-foundations.md)。
+- Bootstrap 需要显式参数和有界 UTF-8 JSON 标准输入，密码无默认值、保留空白且拒绝纯空白，使用现有 scrypt；只建新账号和既有未改动的负责人角色关联，已有或已停用负责人均阻止重跑。预写 STARTED，账号/角色关系/真实成功审计/尝试成功同事务；CLI 限本地非生产。未执行真实账号初始化；实库测试仅创建、验证、清理随机夹具，拒绝删除既有负责人来满足测试条件。
+- 核对每批至多 100 个超时 STARTED/UNKNOWN，游标推进，短事务锁 attempt，联合合法幂等完成摘要与同次审计/真实结果引用核对；不匹配保持 UNKNOWN，不自动重执行业务或清理记录。未给 HTTP 进程加 timer、安装服务或计划任务；部署需由运维明确接入并保存游标。
+- 创建命令保留稳定 entityId=new 的 v1 请求指纹，AuditLog 记录事务内生成的真实 ID，attempt.resultRef 保留结果关联，成功/重放/提交确认丢失路径均一致。现有非创建指纹黄金测试不变；没有提前插入业务实体或制造迁移来绕过自增 ID。
+- 实际最终通过：Node 24.22.2/pnpm 10.34.9 冻结锁离线安装、lint、typecheck、build、test:m0（API 普通 28 / Admin 1 / 本地 MySQL 39，零失败零跳过）、编译后 API smoke、OpenAPI 导出、Prisma validate 和迁移 SQL 静态审查。新增普通测试 4 项、真实数据库测试 8 项，覆盖授权/锁竞争/并发创建/真实审计目标/回滚/丢失提交确认/证据核对/Bootstrap 并发及故障；CLI 无显式授权或非法游标会安全拒绝且不打印标准输入。
+- 本地 MySQL 8.4.13 SELECT VERSION() 与 Redis PING 通过；实际调用 audit:reconcile --after-id=18446744073709551615 返回 examined=0/nextCursor=null，不更改既有尝试。正常核对修改路径在精确 attemptIds 限定的随机实库夹具中验证。生产、远端 CI、真实进程崩溃/代理断网、全新/历史库迁移与备份恢复未运行，未宣称已验收。
+- 残留边界：Customer repository/列表 SQL、完整订单锚点与跨业务竞争、身份管理写接口/自授/最后负责人、部署调度与生产 Bootstrap 接入仍需对应后续任务；DC-005/010 等业务未决门禁未绕过。Admin 既有大包提示和 @scarf/scarf 构建脚本忽略提示仍存在。本轮完成后停止，不启动 Customer 模块。

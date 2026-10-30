@@ -1,5 +1,7 @@
 # 幂等基础组件（2026-10-30）
 
+后续前置补齐：增加 createsEntity/new-target 的真实成功审计目标适配，以及独立的有界尝试核对 CLI，见 [M1 前置基础能力](m1-foundations.md)。下文“本次未实现”的描述保留首次组件交付边界；后台调度尚未安装，未开放 M1 业务端点。
+
 以 Accepted ADR-005 为当前契约，ADR-002 仅为历史；尝试与成功审计遵循 ADR-003，业务锁顺序遵循 ADR-001 和 permission-matrix.md §4.2。复用 idempotency_records、command_attempts、audit_logs 与共享 DatabaseModule，不改 schema、Migration、依赖版本或业务模块。不新增生产 HTTP 端点，不给登录/续期或只读接口自动缓存结果。
 
 ## 服务入口

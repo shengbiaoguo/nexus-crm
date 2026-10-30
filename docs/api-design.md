@@ -127,7 +127,7 @@ HTTP 状态码真实表达结果；不要把所有错误包装成 200。统一�
 
 | Method | Path | 用途 | P / 备注 |
 |---|---|---|---|
-| GET | `/customers` | 客户列表 | `customer:read` + SELF/COLLABORATOR/TEAM |
+| GET | `/customers` | 客户列表 | `customer:read` + SELF/COLLABORATOR/TEAM/ALL（动作与 scope 成对） |
 | POST | `/customers` | 新建客户 | `customer:create`，信用代码数据库去重 |
 | GET | `/customers/:id` | 客户详情 | `customer:read` + 数据范围 |
 | PATCH | `/customers/:id` | 更新允许字段 | `customer:update`，`expectedVersion` |
@@ -366,3 +366,154 @@ Header: `Idempotency-Key` 必填。成功 `200` 返回订单 `status:PENDING`、
 ## 8. 本轮修订与待办
 
 DC-001/008/009/011/012 已完成文档修订，尚待真实实现验收。其余 DC-002～007（不含本轮项）、DC-010 的阶段、依赖与门禁以 requirements.md §13 为准，变更明细见 [design-review-changelog.md](design-review-changelog.md)。本次未补完整豁免、财务、验收、报价或 M3 工作流契约。
+
+## 9. M1 准备补充（2026-10-30）
+
+本节是原接口清单的技术细化；D-06/D-08 已于 2026-10-30 获业务负责人批准并在 §10 闭合，D-01～05/07 仍未决，不自动关闭 DC-005/010。本轮仅文档，下面均不是已开放路由。任务和数据映射见 [M1 实施计划](plans/m1-implementation-plan.md)。不改变 Accepted ADR，不新增通用工作流、证据服务或财务执行模块。
+
+### 9.1 报价内容入口（DC-010）
+
+| 路由 | 请求/结果与边界 |
+| --- | --- |
+| POST `/opportunities/:id/quotes` | 请求只含已定义的报价容器字段（候选 title）；父商机从路径解析；201 摘要 `{id,quoteNo,version}`。不悄悄产生空的已提交版本 |
+| POST `/quotes/:id/versions` | 完整版本请求候选 `{currency,validUntil,items:[{productId?,description,quantity,unitPrice}]}`；客户端不得写 versionNo、总金额、行金额、contentHash、acceptedAt/status。规范化和 Decimal 计算依 D-01；201 摘要 `{id,versionNo,status,version,totalAmount,currency}` |
+| GET `/quotes/:id/versions/:versionNo` | 返回该版本内容及提交/接受摘要；先完整校验版本→报价→商机→客户关系与 quote:read，不能只验证 versionNo 存在 |
+| POST `.../submit` | `{expectedVersion}`；DRAFT 才能首次提交；锁 quote/版本后计算并冻结 contentHash、记录提交人/UTC 时间；200 摘要 `{id,versionNo,status,version,contentHash}` |
+| POST `.../record-acceptance` | 候选 `{expectedVersion,acceptedContentHash,acceptanceRef}`；操作者和记录时间由服务端写入。acceptanceRef 的形式、校验及实际接受时刻是否需另行录入由 D-02 确定。200 摘要 `{id,versionNo,status,version}` |
+
+`versionNo` 是报价内正整数版本序号，`version` 是该实体的乐观锁计数，二者不能混用。创建版本时完整提供内容，不增加未定义的草稿编辑接口；提交后内容不可变，接受只追加状态/证据元数据，不改变明细/hash；修改报价必须新建版本。具体有效期、接受状态转换及新版本对旧接受的影响由 D-02 决定，不能以“内部点击接受”冒充客户真实接受。
+
+上述 POST 统一要求 Idempotency-Key，首次执行有成功审计，重放重新检查当前 quote 动作与客户范围。所有创建结果只返回标量摘要，完整明细另用 GET；这与现有幂等组件兼容。新建实体审计与稳定请求目标之间的适配缺口需先按计划 T03 补齐，不能每次请求随机生成 fingerprint 目标，也不能给真实业务审计写假 ID。
+
+### 9.2 订单草稿内容、条款和快照（DC-005）
+
+§3.2 示例仅展示了最小来源，不能解释为付款条款已从报价自动获得。准备阶段确定的边界是：**付款条款在订单草稿显式录入/替换，submit 前必须完整且有对应正式条款接受依据**；默认首付比例、到期基准、金额公式和证据有效性仍由 D-01/02/03 决定。
+
+| 路由 | 技术契约 |
+| --- | --- |
+| POST `/orders` | 来源 acceptedQuoteVersionId 必填且只由受权范围内完整来源链解析 customer/opportunity；customerTermsAcceptanceRef 沿用原字段。候选新增 paymentTerms 数组，首次可留待草稿 PATCH 补齐，绝不能因此跳过 submit 校验。是否强制创建即完整由 D-03 确定；复制来源报价明细/币种/金额快照，201 摘要沿用 §3.2 |
+| PATCH `/orders/:id` | `{expectedVersion,...已批准的草稿字段}`；条款数组如传入则整体替换且非 null，和订单版本递增同事务。不得修改客户/商机/报价来源、状态、服务器金额/版本。允许编辑的合同字段及是否允许草稿明细偏离报价由 D-04 决定，在此之前不开放明细编辑 |
+| POST `/orders/:id/submit` | 沿用 expectedVersion/remark；验证 DRAFT、来源/明细/金额/付款计划完整、正式条款接受依据匹配当前内容。在订单锚点事务写 round、完整 snapshot、hash、PENDING、新 version；不只保存哈希，不写支付事实 |
+| POST `/orders/:id/approve`、`/reject` | 沿用 approvalRoundId/expectedVersion/decisionReason；必须检查 round 属于该订单、仍待决、快照与提交版本一致、审批权限/门槛明确、非当前 round 的提交人。审批门槛未确定时不开放 approve，不按“经理”角色名称默认放行 |
+| POST `/orders/:id/withdraw` | `{approvalRoundId,expectedVersion,reason?}`；当前轮提交人且仍具动作与对象范围，PENDING 且未形成决定；200 `{id,status:"DRAFT",version,approvalRoundId}`。结束本轮为撤回，不创建 REJECT 决定；与 approve/reject 争同一 orders 行锁 |
+| GET `/orders/:id/approvals` | order:read 和当前客户销售范围；分页返回历史轮次及明确的结束原因，提供可恢复的 snapshot 白名单。快照可置于每轮项内，不通过幂等结果回放全文；其体积/分页须在 DTO 任务中给出明确上限 |
+
+审批快照包含 snapshotSchemaVersion、snapshotVersion（本订单 roundNo）、orderVersion、来源报价版本/哈希、合同明细/金额/币种、付款条款、正式条款接受引用与绑定内容。还需 frozenBy/frozenAt；它们不参与报价 contentHash。合同快照哈希使用固定字段顺序、Decimal/ID/UTC 字符串，保存规范化后的 JSON 及哈希，两者可独立复算。其内容限额须在 T00/T13 评审，不能复用 64 KiB 幂等上限当作合同容量结论。
+
+订单所有写入口（包括 PATCH）复用共享事务与授权锁协议；POST/草稿 PATCH 使用幂等标量结果。状态检查在首次执行业务阶段，重放只重新检查当前身份/动作/范围；不能用旧 expectedVersion 拒绝成功重放。提交、审批、拒绝、撤回各自产生对应成功审计，不因回滚生成“审批驳回”。
+
+### 9.3 M1 的其他契约补齐任务
+
+- 客户列表的信用代码精确查询和“缺信用代码”的疑似重复提示必须在当前可见范围内执行；名称不唯一。D-06 已批准，归一化、匹配、字段和人工核实按 §10；无模糊匹配引擎或隐藏记录详情。
+- `POST /customers/:id/assign` 请求候选 `{expectedVersion,ownerId,collaboratorIds}`，完整替换/缺失语义、目标有效销售能力校验及批量交接在 T09 定案；不以 PATCH ownerId 绕过。批量客户/商机交接仍为 M1 必做（BR-010/DC-007），路由/原子性/部分失败规则由 D-07 确认，不新增未经评审的批处理表。
+- D-08 已批准，商机字段/阶段、终结不重开、主联系人、跟进与筛选白名单按 §10；WON 不等于 CONFIRMED 订单。follow-ups 必须属于商机，作者由服务端设置。
+- customer:create、customer:update、opportunity:create/update、product:manage、quote 和 order 写操作的 DTO 任务应逐个补齐长度、数组上限、缺失/null、字段白名单、2xx/400/401/403/404/409/422/503，随后才逐个注册 Controller；本节没有授权一次性生成全部路由。
+- 金额/数量格式错误用 400 VALIDATION_FAILED；业务金额/条款条件不满足先采用 409 BUSINESS_RULE_VIOLATION，版本/状态冲突用现有码。不能把 PAYMENT_AMOUNT_INVALID 借作所有报价错误；如需新细分码，先同步契约、共享传输类型及错误白名单，不在本次写代码。
+
+### 9.4 必须保留的业务决定与关闭条件
+
+下表保留决策台账；D-06/D-08 已批准并设计闭合，其余选项仍未决定，不存在预选业务答案。未决路径不开通，不用管理员或固定 true 绕过。
+
+| ID | 待明确事项 | 影响/关闭证据 |
+| --- | --- | --- |
+| D-01 | 数量是否允许小数及精度；单价/行额/总额舍入；税费/折扣、零/负数边界及溢出 | DC-010/005；批准的金额例表和边界期望后才能固定列精度/计算及 DTO |
+| D-02 | 报价有效期及边界时刻；接受证据类型/归属/核验；新版本与旧接受关系；已接受后过期是否允许下单；报价接受和正式条款接受的区别 | DC-010/005；完整状态转换表、时间/证据用例；非空 ref 不算核验 |
+| D-03 | 合同付款条款字段与来源；绝对到期日或里程碑；首付识别/金额；计划合计与合同金额关系；条款接受绑定和变更后重新接受 | DC-005；订单 create/PATCH/submit 的完整 JSON、无效用例、PaymentTerm 字段确认 |
+| D-04 | 一报价版本单订单/单有效订单/多订单；终态后能否重建；草稿可改哪些合同明细 | DC-010/005；唯一性语义及 SQL 约束方案，不把假设直接迁移 |
+| D-05 | 单级审批假设、审批金额门槛、授权的表达及快照有效/过期条件 | DC-005；可执行授权/职责分离矩阵和 approve/reject/withdraw 竞争预期 |
+| D-06 | 已批准：代码归一化、全库唯一、可见精确提示、人工核实及最小占用信号取舍 | 设计闭合；§10、requirements §14、批准记录及审查记录；实现测试未验收 |
+| D-07 | 批量交接选中/全部范围、商机责任人变化、旧协作者保留、原子或逐项失败、目标有效销售资格 | BR-001/010、DC-007；请求/响应、版本冲突与跨团队用例；不得降为 V1.1 |
+| D-08 | 已批准：CRM 最小字段/状态、主联系人、商机终结不重开、跟进仅追加 | 设计闭合；§10、模型 §12、requirements §14；金额仍留 D-01，交接仍留 D-07 |
+
+技术字段默认长度、分页上限、规范化格式及资源限制可由开发按现有规范落实并记录；凡影响上述业务含义，必须有明确决定。DC-005/010 只有相应决定、API/模型同步和验收样例齐备后才可标“设计关闭”，实现关闭还需真实 MySQL/HTTP 测试，不能仅由本次文档补充宣告。
+
+## 10. D-06 / D-08 已批准 CRM 接口契约（待实现）
+
+2026-10-30 业务负责人批准；业务定义、精确字段规则及验收见 [requirements §14](requirements.md)，存储见 [data-model §12](data-model.md)，范围见 [permission-matrix §10](permission-matrix.md)。本节细化 §2.2 的路由，不代表运行时 OpenAPI 已开放。D-01～05/07 未闭合。
+
+### 10.1 DTO、枚举与默认
+
+字符串长度为 Unicode 码点；短文本 NFKC/去首尾空白，客户名另合并内部空白；content/description/reason 只统一换行、去首尾空白，不重写正文。纯文本拒绝 NUL/非法控制字符，允许正文换行/制表符。所有写 DTO 拒绝未知字段与隐式类型转换；POST 可选字段缺失采用下表默认，PATCH 缺失不改、null 只清可空字段，非空文本不能用空串代替。派生值、actor、createdAt/updatedAt/version、ownerId/status/stage 不接受客户端普通写入。
+
+| DTO / 路由（省略 /api/v1） | 请求字段、默认及约束 | 成功响应 data / 状态 |
+| --- | --- | --- |
+| POST /customers | name 必填 1～200；creditCode? 默认 null；description? 默认 null、最多 2000；只创建客户 | 201 {id,status,version}；status=ACTIVE、owner=actor |
+| PATCH /customers/:id | expectedVersion 必填正整数；可选 name/creditCode/description；代码非空不可清空 | 200 {id,status,version} |
+| POST /customers/duplicate-check | name 必填；creditCode?/phone?/email? 默认 null；excludeCustomerId? 仅可读客户 ID | 200 {candidates,hasMore}，no-store；只读，不需要幂等 Key，不持久化输入 |
+| POST /customers/:id/archive、/restore | expectedVersion，reason 必填 1～500 | 200 {id,status,version}；ACTIVE→ARCHIVED / ARCHIVED→ACTIVE |
+| POST /customers/:id/contacts | name 必填 1～100；title?≤100、phone?≤40、email?≤254 默认 null；isPrimary? 默认 false | 201 {id,version}；status=ACTIVE |
+| PATCH /customers/:id/contacts/:contactId | expectedVersion；可选 name/title/phone/email/isPrimary，规则同创建 | 200 {id,version} |
+| POST /customers/:id/contacts/:contactId/deactivate | expectedVersion，reason 必填 1～500 | 200 {id,status,version}；ACTIVE→INACTIVE，清主标记 |
+| POST /opportunities | customerId 必填 ID 字符串；title 必填 1～200；description?≤2000 默认 null | 201 {id,stage,version}；NEW、owner=actor |
+| PATCH /opportunities/:id | expectedVersion；可选 title/description，仅进行中 | 200 {id,stage,version} |
+| POST /opportunities/:id/change-stage | expectedVersion；stage 必填 NEW/QUALIFIED/NEGOTIATING；reason 必填 1～500 | 200 {id,stage,version}；可前进/回退，不可同阶段新命令 |
+| POST /opportunities/:id/close-won、/close-lost | expectedVersion；reason 必填 1～500 | 200 {id,stage,version}；写 closedAt/closeReason，不触发订单操作 |
+| POST /opportunities/:id/follow-ups | content 必填 1～4000；nextFollowUpAt? 默认 null；correctionOfId? 默认 null、同商机已有跟进 | 201 {id}；author/createdAt 由服务端写，不改变商机 version |
+
+以上实体写入（包括 PATCH）均复用幂等命令和安全标量结果；查重 POST 为只读例外。更新使用被操作实体 expectedVersion；跟进追加不接收 expectedVersion。ID 为规范无符号 BigInt 十进制字符串，不转 Number。expectedAmount 暂不出现在 DTO，待 D-01 后再开放，不填 0。联系人路径决定 customerId，跟进路径决定 opportunityId，不接收可伪造父 ID。
+
+枚举：CustomerStatus=ACTIVE/ARCHIVED；ContactStatus=ACTIVE/INACTIVE；OpportunityStage=NEW/QUALIFIED/NEGOTIATING/WON/LOST；DuplicateMatchReason=CREDIT_CODE/NAME/PHONE/EMAIL。不新增角色名授权旁路或订单状态码。
+
+### 10.2 归一化、查重和状态校验
+
+- creditCode 原输入≤64 码点，NFKC→去首尾 Unicode 空白→ASCII 大写，结果严格 18 位 [0-9A-Z]。空串、内部空白/标点非法；不计算校验位、不验真；null/缺失允许，非空已有代码不得清空。归一化先于 v1 请求指纹。全库 UNIQUE（含归档）是最终并发保障。
+- phone NFKC/trim，显示只接受数字/+/-/空格/括号，+ 只在首位；派生键为可选 + 加 3～20 位数字，不改国家区号。email 为 trim 后 ASCII 常规邮箱≤254，派生键小写，不删 +tag/点；name 派生 normalizedName 对 ASCII 大写。数据库匹配沿用 utf8mb4_0900_ai_ci。客户端不得写派生键。
+- 查重有代码时仅当前可见代码相等；无代码时规范化完整名称或有效联系人 phone/email 相等作 OR 提示，不模糊匹配，不阻止无代码重复创建。按客户去重，最多 5 个、id 升序，hasMore 仅在可见候选内计算；不返回全库 exists/total、联系人正文、owner 或团队。查重不是创建必经步骤，不锁定身份或预留代码。
+- 联系人必须 phone/email 至少一项；每客户最多 100 个有效联系人；零或一个有效主联系人，指定新主自动清旧主且双方 version 提升；并发按客户锁串行，后提交者成为主。停用清主、不自动补选；INACTIVE 不编辑/恢复/删除。
+- 归档只允许无进行中商机，客户锁串行化与商机创建/阶段变更。归档后客户资料、联系人、商机创建与跟进追加禁写，先 restore；历史可读，不释放代码，不自动废止已有报价/订单；受控交接留 T09。
+- 进行中阶段可有理由前进或回退；WON 只从 QUALIFIED/NEGOTIATING 进入，需父客户 ACTIVE、至少一个有效联系人及 reason。LOST 可从任一进行中阶段进入且 reason 必填。两终态不重开、不普通编辑；owner 受控交接留 D-07。WON 是销售人工判断，不等于已接受报价、订单确认、到账或交付许可。LOST 不作新报价/新订单来源，但不取消既有订单/历史报价；T11/T14 接入时落实此边界。
+- nextFollowUpAt 必须 RFC3339 UTC Z、毫秒精度；格式合法但首次执行时非未来为 409。终态允许追加说明/更正但计划必须 null；ARCHIVED 不允许追加。correctionOfId 只指同商机已有记录，原文保留；无 PATCH/DELETE，更正不作废旧记录，也无提醒任务。与终结竞争在客户→商机锁下重验；成功重放不因旧状态/时间已过而拒绝。
+
+### 10.3 读取投影、响应与异常示例
+
+GET /customers 及详情只输出当前范围内客户业务字段（id/name/creditCode/ownerId/status/description/version/createdAt/updatedAt/createdBy）；normalizedName 不输出。联系人列表返回 id/customerId/name/title/phone/email/status/isPrimary/version/createdAt/updatedAt/createdBy，不返回派生匹配键；正文仅限有客户读取权限的 GET。商机列表/详情返回 id/customerId/ownerId/title/description/stage/closedAt/closeReason/version/createdAt/updatedAt/createdBy；不返回未开放 expectedAmount。跟进列表返回 id/opportunityId/authorId/content/nextFollowUpAt/correctionOfId/createdAt。字段仍须通过固定 scope 和白名单，不扩财务/交付投影。
+
+各列表 page=1/pageSize=20，pageSize 1～100，createdAt DESC,id DESC；客户筛选限 status/ownerId/creditCode 精确查询，商机筛选限 customerId/stage/ownerId，联系人筛选限路径 customerId/status，跟进限路径 opportunityId；不存在的筛选参数拒绝。where、total 同授权快照，客户或 owner 筛选不扩大范围。
+
+创建客户示例（仅演示格式，不宣称真实企业身份）：
+
+```json
+{"name":"示例服务企业","creditCode":null,"description":null}
+```
+
+201：
+
+```json
+{"data":{"id":"10001","status":"ACTIVE","version":1},"requestId":"00000000-0000-4000-8000-000000000001"}
+```
+
+查重 200（只有不可见匹配时与完全无匹配相同）：
+
+```json
+{"data":{"candidates":[],"hasMore":false},"requestId":"00000000-0000-4000-8000-000000000002"}
+```
+
+可见候选 200：
+
+```json
+{"data":{"candidates":[{"id":"10001","name":"示例服务企业","status":"ACTIVE","matchReasons":["NAME","EMAIL"]}],"hasMore":false},"requestId":"00000000-0000-4000-8000-000000000003"}
+```
+
+全库代码冲突一律 409，无 details 或输入代码回显，不区分可见性：
+
+```json
+{"code":"BUSINESS_RULE_VIOLATION","message":"该客户信息无法保存，请核对企业信用代码或联系有权负责人处理","requestId":"00000000-0000-4000-8000-000000000004"}
+```
+
+赢单请求/响应示例（仍需 Idempotency-Key）：
+
+```json
+{"expectedVersion":2,"reason":"客户已明确选择合作，后续另行完成报价及订单手续"}
+```
+
+```json
+{"data":{"id":"20001","stage":"WON","version":3},"requestId":"00000000-0000-4000-8000-000000000005"}
+```
+
+错误沿用现有码：401 UNAUTHENTICATED；无动作 grant 403 PERMISSION_DENIED；不可见/不存在/父子或更正来源错配 404 RESOURCE_NOT_FOUND；字段/格式/枚举/null/长度错误 400 VALIDATION_FAILED；已授权目标版本冲突 409 VERSION_CONFLICT；归档禁写/终态改写/同阶段/缺赢单联系人/联系人上限/非法计划时间/代码冲突 409 BUSINESS_RULE_VIOLATION。幂等 409/503、审计 503 沿用 ADR-003/005，未注册跟进改删路由返回 404，不给作者/管理员后门。业务状态细节只在当前授权后返回。
+
+全库唯一性仍有最小代码占用信号，该取舍已获业务批准；只保护详情，不能承诺完全隐藏存在性。查重 Cache-Control:no-store；输入和联系人正文不进技术日志、成功审计全文或幂等快照；内部员工授权及部署限流不因本接口取消。
+
+### 10.4 验收追踪
+
+D-06 归一化/多个 NULL/跨用户并发唯一/可见与不可见提示/同 Key 和失败回滚，及 CRM-01～18 的状态、主联系人、终结、追加更正、权限与迁移场景以 requirements §14.3 为正式期望，原批准记录 §2.7/§3.10 保留来源。T04/T05/T06/T07/T17 分阶段实施真实 MySQL/HTTP 验收；本次未新增 CRM 运行时 OpenAPI 路由或运行 CRM 测试；既有 OpenAPI 导出回归通过。

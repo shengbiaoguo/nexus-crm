@@ -18,6 +18,8 @@
     "test:db": "pnpm --filter @nexus/api test:db",
     "test:m0": "pnpm test && pnpm test:db",
     "db:verify": "pnpm --filter @nexus/api db:verify",
+    "identity:bootstrap": "pnpm --filter @nexus/api identity:bootstrap",
+    "audit:reconcile": "pnpm --filter @nexus/api audit:reconcile",
     "prisma:seed": "pnpm --filter @nexus/api prisma:seed",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

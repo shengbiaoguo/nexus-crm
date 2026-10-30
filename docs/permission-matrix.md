@@ -152,3 +152,45 @@ role:grant_business 只由受保护的 business_owner 角色提供；该权限�
 | GET audit-logs | audit:read | 管 I、业 ALL | 目标范围与字段过滤见 §4.2 |
 
 业务负责人默认额外持 role:manage、role:grant_business；不默认持 user:manage。财务/交付复核、豁免以及批量交接的新增端点权限随相应待办补齐，未定义前不启用，不以管理员权限兜底。
+
+## 9. M1 接入约束（2026-10-30，DC-001）
+
+DC-001 的基线已经定义，但 M0 `permission.policy.ts` 只执行 user:manage、role:manage、department:read 三个映射；不能直接用它放行业务范围。M1 应新增固定销售范围 Policy 和写事务授权能力，继续复用 M0 身份校验；具体任务见 [M1 实施计划](plans/m1-implementation-plan.md)。
+
+| 操作组 | M1 允许的固定范围 | 必需的额外检查 |
+| --- | --- | --- |
+| customer:create/read/update；opportunity:read/create/update；quote:read/create/submit/record_acceptance；order:read/create/update/submit/withdraw | 同条 grant 的 SELF_COLLABORATOR、TEAM 或 ALL；不是角色名白名单 | 子资源经当前客户继承；创建客户时 customer:create 校验有效 grant，负责人固定为操作者；其他创建先验证父对象 |
+| customer:assign | TEAM 或 ALL | 同时验证源客户与目标用户范围、有效销售资格；协作调整同样受控；商机责任人交接/批量契约由 D-07 决定 |
+| order:approve/reject | TEAM 或 ALL | 当前 round 非提交人、审批门槛/快照有效（D-05）；COLLABORATOR 不授予审批 |
+| product:read/manage | CATALOG | 动作不可相互代替；管理仍需显式 product:manage，历史价格不回写 |
+
+上表列出允许的 action/scope 组合，不给任何账号自动增加权限；seed 默认角色仍按 §8，出现差异须走受控变更。customer:create 的 scope 仅确定创建资格，不能接受客户端 ownerId 或借此跨团队创建；D-07 的目标资格不能只按 role.code 字符串推断。
+
+SELF_COLLABORATOR 的两个分支必须区分：负责本人客户不等于协作成员审批；协作成员的读写只适用于本来允许协作的动作。ASSIGNED_PROJECT、FINANCE_RELATED 在 M1 没有真实关联实体，仍默认拒绝，不能把必要投影伪造成全部销售数据。
+
+列表 where、总数、详情、嵌套对象、状态命令、幂等重放都复用相同固定策略。无动作权限的列表为 403；不可见详情/错误父子关系为 404；不能先无范围读取客户再过滤输出，也不能向无权用户披露当前版本、重复客户或审批快照。
+
+读取沿用同一 RepeatableRead 快照；写入使用 ReadCommitted 的当前读与 §4.2 锁顺序。幂等 Key 的争用位于业务锁之前（现有组件协议），业务锁依次为全体相关用户→角色→部门→客户→已有订单→子记录，各层数值 ID 排序。子记录的跨表固定顺序在 T05/T13 明确并进行逆序竞争测试。客户写入/交接保护客户行；角色成员撤销保护用户行；权限替换保护角色行；组织调整保护相关部门，双方必须遵循同一协议。
+
+用户/角色/部门集合须在业务锁前解析，持锁后重验。拥有者、团队祖先、成员集合变化时完整回滚并重新计划，不能在客户锁后补锁用户或部门；userLocks 的 100 项上限应在批量 DTO 和业务校验中提前控制。不得把 AuthorizationService.withRead 返回的上下文缓存成业务写许可，也不得在幂等 authorize 回调内调用另开的 withRead 事务。
+
+## 10. D-06 / D-08 已批准 CRM 对象规则（2026-10-30）
+
+业务批准来源见 [决策记录](decisions/m1-d06-d08-proposal.md)，规则见 requirements §14、接口见 api-design §10。复用 §4/§9 固定 action/scope，不改既有 BR、职责分离或授权管理；下列路由均待实现，不自动扩大任何账号/seed 权限。
+
+| 操作 | 动作与范围 | 对象和状态检查 |
+| --- | --- | --- |
+| duplicate-check、客户/联系人读取 | customer:read + SELF_COLLABORATOR/TEAM/ALL 同条 grant | 只查当前可见客户；可见候选及 hasMore 同一快照；excludeCustomerId 须可读否则 404 |
+| 客户创建 | customer:create 的有效 grant | owner 固定 actor；创建权限不隐含读取，不能据此获取重复候选 |
+| 客户 PATCH、archive/restore、联系人新增/PATCH/deactivate/设主 | customer:update + 当前客户根范围 | 普通 PATCH 不收 owner/协作者/status；archive 无进行中商机，restore 只恢复目录管理；归档禁止其他 CRM 写；主联系人变更不转移归属 |
+| 商机创建/读取 | opportunity:create/read + 当前父客户范围 | 当前客户根→商机链验证；创建要求 ACTIVE，owner 不独立授权 |
+| 商机编辑/change-stage/close-won/close-lost、跟进追加 | opportunity:update + 当前父客户范围 | 服务端检查阶段、版本、有效联系人、原因与计划时间；父子错配 404，不按作者或商机 owner 额外放行 |
+| 跟进列表 | opportunity:read + 当前父客户范围 | 包含更正与原记录但只限本商机；无编辑/删除权限或管理员旁路 |
+
+信用代码全库唯一可能触及不可见客户，但不能返回其 ID/name/owner/团队/版本/联系人/数量；统一 409 BUSINESS_RULE_VIOLATION 固定消息，不区分可见性。查重本身只给最多 5 个可见客户的 id/name/status/matchReasons，隐藏匹配与无匹配同为空，不返全库 exists/total。业务负责人已接受保存成功/409 带来的最小占用信号，不宣称完全隐藏存在性；不增加匿名/批量探测或全库查重 grant。
+
+ARCHIVED 客户及终态商机历史仍依当前客户 scope 可读，不因归档/终结变成公开或被隐式删除。归档不释放信用代码、不撤销读取、不取消历史订单；WON 不代替订单批准，LOST 不撤销订单。联系人正文只在受控读取返回；财务/交付不因本文获得销售跟进或完整联系人。写结果和幂等仅安全标量，日志/审计不存联系方式全文，审计查询仍按当前目标可见性。
+
+每次写和重放重新验证权威身份/动作/当前客户范围；原负责人/作者/创建者不保留越权访问。遵循用户→角色→部门→客户→已有订单（确实涉及时）→子记录；CRM 子记录跨类固定 Opportunity→CustomerContact→FollowUp，同类 ID 排序。主联系人切换、有效联系人≤100、归档与商机创建/状态、追加与终结在客户锁下串行，不逆序补身份锁；该锁表仍需 T05 实库验证。受控交接及目标资格保留 D-07/T09，不用 ordinary PATCH 绕过。
+
+验收覆盖：无 grant 403，不可见/父子错配 404，停用身份 401；TEAM 动态范围、同快照 where/count、客户移交/撤权与写入和重放竞争；隐藏候选不改变 hasMore；联系人/跟进正文不进入日志或幂等；状态禁止与职责权限分别测试。完整矩阵见 requirements §14.3 CRM-01～18。设计批准不表示这些测试已通过。

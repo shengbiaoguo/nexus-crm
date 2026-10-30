@@ -32,6 +32,8 @@ export interface SuccessAudit extends AuditContext {
   before?: Snapshot;
   after?: Snapshot;
   resultRef?: string;
+  /** Only for a new entity: attempt retains entityId=new; success records the real generated ID. */
+  createdEntityId?: string;
 }
 export interface AttemptInput extends AuditContext {
   operationId: string;
@@ -62,6 +64,10 @@ export class AuditService {
   private readonly transactions = new WeakSet<object>();
   private readonly failedTransactions = new WeakSet<object>();
   constructor(private readonly logger: StructuredLogger) {}
+
+  assertTransaction(tx: Prisma.TransactionClient): void {
+    this.transactionOnly(tx);
+  }
 
   /** Registers the exact interactive tx; Prisma 7 also exposes $transaction on transaction clients. */
   async withTransaction<T>(
@@ -136,6 +142,17 @@ export class AuditService {
     const action = parse(identifier, input.action);
     const attemptId = input.attemptId === undefined ? undefined : parse(z.uuid(), input.attemptId);
     const resultRef = this.resultRef(input.resultRef);
+    const createdId =
+      input.createdEntityId === undefined ? undefined : parse(actorId, input.createdEntityId);
+    if (
+      createdId !== undefined &&
+      (!attemptId ||
+        context.entityId !== 'new' ||
+        resultRef !== `${context.entityType}:${createdId}`)
+    )
+      throw new TypeError(
+        'Created entity requires a new-target attempt and matching result reference',
+      );
     const beforeJson = json(input.before);
     const afterJson = json(input.after);
     try {
@@ -145,6 +162,7 @@ export class AuditService {
             attemptId,
             ...context,
             ...actor(context),
+            ...(createdId === undefined ? {} : { operationId: action }),
             status: { in: ['STARTED', 'UNKNOWN'] },
           },
           data: {
@@ -159,6 +177,7 @@ export class AuditService {
       const audit = await tx.auditLog.create({
         data: {
           ...context,
+          ...(createdId === undefined ? {} : { entityId: createdId }),
           ...actor(context),
           action,
           attemptId: attemptId ?? null,

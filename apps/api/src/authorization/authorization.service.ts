@@ -24,49 +24,7 @@ export class AuthorizationService {
     try {
       return await this.database.client.$transaction(
         async (tx) => {
-          const actor = await tx.user.findUnique({
-            where: { id: BigInt(identity.sub) },
-            select: {
-              id: true,
-              status: true,
-              credentialVersion: true,
-              refreshSessions: {
-                where: { id: BigInt(identity.sid) },
-                select: { revokedAt: true, expiresAt: true },
-              },
-              roles: {
-                where: { role: { status: 'ACTIVE' } },
-                select: {
-                  role: {
-                    select: {
-                      id: true,
-                      permissions: {
-                        select: { scopeCode: true, permission: { select: { code: true } } },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          });
-          const session = actor?.refreshSessions[0];
-          if (
-            !actor ||
-            actor.status !== 'ACTIVE' ||
-            actor.credentialVersion !== identity.cv ||
-            !session ||
-            session.revokedAt ||
-            session.expiresAt.getTime() <= Date.now()
-          )
-            throw unauthenticated();
-          const grants = actor.roles.flatMap(({ role }) =>
-            role.permissions.map(({ permission, scopeCode }) => ({
-              roleId: role.id.toString(),
-              code: permission.code,
-              scopeCode,
-            })),
-          );
-          return read(tx, { actorId: actor.id, grants });
+          return read(tx, await this.inTransaction(tx, identity));
         },
         { isolationLevel: 'RepeatableRead' },
       );
@@ -74,6 +32,56 @@ export class AuthorizationService {
       if (error instanceof ApiException) throw error;
       throw new ApiException('SERVICE_UNAVAILABLE', 'Authorization dependency unavailable');
     }
+  }
+
+  /** Authoritative current-transaction read; writers must first acquire identity locks. */
+  async inTransaction(
+    tx: Prisma.TransactionClient,
+    identity: AccessIdentity,
+  ): Promise<ReadAuthorization> {
+    const actor = await tx.user.findUnique({
+      where: { id: BigInt(identity.sub) },
+      select: {
+        id: true,
+        status: true,
+        credentialVersion: true,
+        refreshSessions: {
+          where: { id: BigInt(identity.sid) },
+          select: { revokedAt: true, expiresAt: true },
+        },
+        roles: {
+          where: { role: { status: 'ACTIVE' } },
+          select: {
+            role: {
+              select: {
+                id: true,
+                permissions: {
+                  select: { scopeCode: true, permission: { select: { code: true } } },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    const session = actor?.refreshSessions[0];
+    if (
+      !actor ||
+      actor.status !== 'ACTIVE' ||
+      actor.credentialVersion !== identity.cv ||
+      !session ||
+      session.revokedAt ||
+      session.expiresAt.getTime() <= Date.now()
+    )
+      throw unauthenticated();
+    const grants = actor.roles.flatMap(({ role }) =>
+      role.permissions.map(({ permission, scopeCode }) => ({
+        roleId: role.id.toString(),
+        code: permission.code,
+        scopeCode,
+      })),
+    );
+    return { actorId: actor.id, grants };
   }
 
   require(authorization: ReadAuthorization, permission: ReadPermission): void {

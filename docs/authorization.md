@@ -1,5 +1,7 @@
 # RBAC 与对象级授权（2026-10-30）
 
+后续前置补齐：现已增加销售对象 guard、同事务身份读取与身份写锁协调，见 [M1 前置基础能力](m1-foundations.md)。下文保留最初 M0 读取接口的实现范围；新增 guard 不表示 Customer/Order repository、列表 SQL 或管理写接口已经完成。
+
 本次在现有 M0 身份模型上实现读取授权，遵循 permission-matrix.md §4/§8、现行 ADR-001/003/004/005；不改 BR-001～010。不新增 schema、Migration、依赖包、角色写入或业务模块。
 
 ## 已实现接口与规则

@@ -11,6 +11,8 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/test/*.test.js",
     "test:db": "tsc -p tsconfig.test.json && node --test dist-test/test/database/*.test.js",
     "db:verify": "node dist/database/verify-m0.js",
+    "identity:bootstrap": "node dist/database/bootstrap-identity.js",
+    "audit:reconcile": "node dist/audit/reconcile-attempts.js",
     "prisma:seed": "pnpm build && prisma db seed",
     "openapi:export": "node dist/export-openapi.js",
     "prisma:validate": "prisma validate",
