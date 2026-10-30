@@ -5,6 +5,24 @@ export interface ApiResponse<T> {
   requestId: string;
 }
 
+export interface PaginationMeta {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface ApiListResponse<T> extends ApiResponse<T[]> {
+  meta: PaginationMeta;
+}
+
+export interface ApiErrorResponse {
+  code: string;
+  message: string;
+  details?: unknown;
+  requestId: string;
+}
+
 export interface HealthStatus {
   status: 'ok';
 }

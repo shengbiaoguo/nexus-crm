@@ -99,6 +99,10 @@ HTTP 状态码真实表达结果；不要把所有错误包装成 200。统一�
 
 ### 2.1 系统、身份与角色（M0）
 
+2026-10-30 认证实现注记：JWT + Refresh Token 的四个认证端点已实现，DTO、有效期、错误与边界见 [认证契约](authentication.md)。其他接口的实现范围以以下 RBAC 注记为准。
+
+2026-10-30 RBAC 实现注记：本次另实现 GET `/users`、`/users/:id`、`/roles`、`/permissions`、`/departments` 的 M0 读取授权。权限配对、对象范围、分页和字段投影见 [授权契约](authorization.md)。用户/角色写接口及其他业务模块仍未开放。
+
 | Method | Path | 用途 | P / 备注 |
 |---|---|---|---|
 | GET | `/health` | 探活 | 开发/运维，公开内容受限 |
@@ -212,6 +216,8 @@ HTTP 状态码真实表达结果；不要把所有错误包装成 200。统一�
 - 错误应可按 `requestId` 关联；为防止信息泄露，受限资源的 actual status/版本不可随意展示给未授权者。
 
 ### 3.1.1 幂等公开契约（DC-008）
+
+2026-10-30 实现注记：可复用幂等 Service、指纹 v1、事务结果及尝试审计已实现；接入要求、恢复探测、留存和验证边界见 [幂等基础组件](idempotency.md)。本次不新增或开放下面的业务命令端点。
 
 - Key 为规范化小写 UUID。同一用户跨会话/操作唯一，不同用户独立。指纹 v1 包含 API 主版本、稳定 operationId、路径目标及规范化 DTO（含 expectedVersion）；规范化规则见 ADR-005。
 - 当前认证/动作/对象范围检查后才允许回放，回放不受旧 expectedVersion 或已结束状态阻断。并发等待最多 2 秒，仍进行返回 409 IDEMPOTENCY_IN_PROGRESS、Retry-After: 1。

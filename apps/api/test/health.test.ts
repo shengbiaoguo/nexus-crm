@@ -24,10 +24,20 @@ test('health and OpenAPI work without MySQL or Redis connections', async () => {
     assert.equal(body.requestId, response.headers.get('x-request-id'));
     assert.notEqual(body.requestId, 'untrusted-client-id');
     assert.ok(document.paths['/api/v1/health']);
+    assert.deepEqual(Object.keys(body).sort(), ['data', 'requestId']);
+    const serverError = document.paths['/api/v1/health']?.get?.responses['500'];
+    assert.ok(serverError && 'content' in serverError);
+    assert.deepEqual(serverError.content?.['application/json']?.schema, {
+      $ref: '#/components/schemas/ErrorResponseDto',
+    });
+    assert.ok(document.components?.schemas?.ErrorResponseDto);
     assert.equal((await fetch(`${origin}/docs`)).status, 200);
     const missing = await fetch(`${origin}/api/v1/missing`);
     assert.equal(missing.status, 404);
-    assert.equal(((await missing.json()) as { code: string }).code, 'RESOURCE_NOT_FOUND');
+    const missingBody = (await missing.json()) as { code: string; requestId: string };
+    assert.equal(missingBody.code, 'RESOURCE_NOT_FOUND');
+    assert.equal(missingBody.requestId, missing.headers.get('x-request-id'));
+    assert.notEqual(missingBody.requestId, body.requestId);
   } finally {
     await app.close();
   }

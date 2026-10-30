@@ -2,6 +2,8 @@
 
 pnpm Monorepo 工程底座，已实现 M0 身份/平台数据库模型、首份迁移、受控字典 Seed 和数据库集成测试；**不等于完整 M0 业务底座完成**。提供健康检查、Swagger 和前端空壳，尚未实现 Auth/RBAC 执行逻辑或 CRM/订单/财务业务表。
 
+结构化运行日志、敏感数据脱敏、事务审计及关键尝试记录的使用与边界见 [结构化日志与审计](docs/logging-and-audit.md)。真实数据库验证使用 `pnpm test:db`，只连接已配置的本地非生产数据库。
+
 ## 环境
 
 - Node **24.22.2 LTS**、pnpm **10.34.9**（packageManager 和 lockfile 固定）。

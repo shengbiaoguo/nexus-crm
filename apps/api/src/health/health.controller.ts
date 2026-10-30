@@ -1,7 +1,6 @@
-import { Controller, Get, Req } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
-import type { ApiResponse, HealthStatus } from '@nexus/shared';
-import type { Request } from 'express';
+import type { HealthStatus } from '@nexus/shared';
 
 class HealthData {
   @ApiProperty({ enum: ['ok'] })
@@ -25,7 +24,7 @@ export class HealthController {
     summary: 'Process liveness; does not probe dependencies',
   })
   @ApiOkResponse({ type: HealthResponse })
-  getHealth(@Req() request: Request): ApiResponse<HealthStatus> {
-    return { data: { status: 'ok' }, requestId: String(request.res?.getHeader('X-Request-Id')) };
+  getHealth(): HealthStatus {
+    return { status: 'ok' };
   }
 }

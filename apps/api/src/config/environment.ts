@@ -7,6 +7,15 @@ import { z } from 'zod';
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_HOST: z.string().min(1).default('127.0.0.1'),
+  AUTH_JWT_SECRET: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{43}$/)
+    .refine(
+      (value) =>
+        Buffer.from(value, 'base64url').length === 32 &&
+        Buffer.from(value, 'base64url').toString('base64url') === value,
+    )
+    .optional(),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   CORS_ORIGIN: z.url().refine((value) => ['http:', 'https:'].includes(new URL(value).protocol)),
   SWAGGER_ENABLED: z

@@ -1,51 +1,46 @@
 import 'reflect-metadata';
-import { ConsoleLogger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { API_PREFIX } from '@nexus/shared';
-import { randomUUID } from 'node:crypto';
-import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module.js';
 import type { Environment } from './config/environment.js';
 import { ErrorFilter } from './http/error.filter.js';
+import { createValidationPipe } from './http/validation.pipe.js';
+import { requestIdMiddleware } from './http/request-id.middleware.js';
+import { ResponseInterceptor } from './http/response.interceptor.js';
+import { ErrorResponseDto } from './http/error-response.dto.js';
+import { StructuredLogger } from './logging/structured-logger.service.js';
 
 export async function createApplication(environment: Environment, logging = true) {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    logger: logging ? new ConsoleLogger({ json: true }) : false,
+  const app = await NestFactory.create<NestExpressApplication>(AppModule.register(environment), {
+    logger: false,
     bodyParser: false,
   });
+  const logger = app.get(StructuredLogger);
+  logger.setEnabled(logging);
+  app.useLogger(logging ? logger : false);
   app.disable('x-powered-by');
-  app.use((request: Request, response: Response, next: NextFunction) => {
-    const requestId = randomUUID();
-    const startedAt = performance.now();
-    response.setHeader('X-Request-Id', requestId);
-    // Never log headers, query strings or request bodies.
-    if (logging) {
-      response.once('finish', () =>
-        console.log(
-          JSON.stringify({
-            event: 'http_request',
-            requestId,
-            method: request.method,
-            status: response.statusCode,
-            durationMs: Math.round(performance.now() - startedAt),
-          }),
-        ),
-      );
-    }
-    next();
-  });
+  app.use(requestIdMiddleware(logging, logger));
   app.useBodyParser('json', { limit: '1mb' });
   app.setGlobalPrefix(API_PREFIX.slice(1));
   app.enableCors({ origin: environment.CORS_ORIGIN });
-  app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-  );
-  app.useGlobalFilters(new ErrorFilter());
+  app.useGlobalPipes(createValidationPipe());
+  app.useGlobalFilters(new ErrorFilter(logger));
+  app.useGlobalInterceptors(new ResponseInterceptor());
   const document = SwaggerModule.createDocument(
     app,
-    new DocumentBuilder().setTitle('Nexus CRM API').setVersion('0.0.0').addBearerAuth().build(),
+    new DocumentBuilder()
+      .setTitle('Nexus CRM API')
+      .setVersion('0.0.0')
+      .addBearerAuth()
+      .addGlobalResponse({
+        status: 500,
+        description: 'Unexpected server error; internal details are not exposed',
+        type: ErrorResponseDto,
+        headers: { 'X-Request-Id': { schema: { type: 'string', format: 'uuid' } } },
+      })
+      .build(),
   );
   if (environment.SWAGGER_ENABLED) {
     SwaggerModule.setup('docs', app, document, { jsonDocumentUrl: '/docs-json' });

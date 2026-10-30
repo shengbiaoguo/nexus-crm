@@ -16,6 +16,7 @@
     "build": "pnpm -r build",
     "test": "pnpm --filter @nexus/shared build && pnpm -r test",
     "test:db": "pnpm --filter @nexus/api test:db",
+    "test:m0": "pnpm test && pnpm test:db",
     "db:verify": "pnpm --filter @nexus/api db:verify",
     "prisma:seed": "pnpm --filter @nexus/api prisma:seed",
     "format": "prettier --write .",

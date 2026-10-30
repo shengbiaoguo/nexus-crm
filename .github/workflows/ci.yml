@@ -33,3 +33,50 @@ jobs:
         with:
           name: openapi
           path: artifacts/openapi.json
+  m0-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Disposable runner-only credentials, never used by local or deployed environments.
+    env:
+      NODE_ENV: test
+      DATABASE_URL: mysql://nexus:ci-only-nexus@127.0.0.1:3306/nexus_m0_test
+      REDIS_URL: redis://127.0.0.1:6379
+      CORS_ORIGIN: http://localhost:5173
+    services:
+      mysql:
+        image: mysql:8.4.7
+        env:
+          MYSQL_DATABASE: nexus_m0_test
+          MYSQL_USER: nexus
+          MYSQL_PASSWORD: ci-only-nexus
+          MYSQL_ROOT_PASSWORD: ci-only-root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+      redis:
+        image: redis:8.2.2
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s --health-timeout=3s --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.2
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm prisma:generate
+      - run: node scripts/review-m0-sql.mjs
+      # Only this explicitly provisioned, empty CI database receives migrate deploy/seed.
+      - run: pnpm prisma:migrate:deploy
+      - run: pnpm build
+      - run: pnpm prisma:seed
+      - run: pnpm services:check
+      - run: pnpm test:m0
