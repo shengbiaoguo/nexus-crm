@@ -1,6 +1,7 @@
 nexus-crm/
 ├── .editorconfig
 ├── .env.example
+├── .gitattributes
 ├── .github/
 │   └── workflows/
 │       └── ci.yml
@@ -28,6 +29,9 @@ nexus-crm/
 │       ├── package.json
 │       ├── prisma/
 │       │   ├── migrations/
+│       │   │   ├── 20261030014538_init_m0/
+│       │   │   │   └── migration.sql
+│       │   │   ├── migration_lock.toml
 │       │   │   └── README.md
 │       │   └── schema.prisma
 │       ├── prisma.config.ts
@@ -37,21 +41,33 @@ nexus-crm/
 │       │   ├── check-services.ts
 │       │   ├── config/
 │       │   │   └── environment.ts
+│       │   ├── database/
+│       │   │   ├── local-database.ts
+│       │   │   ├── seed-baseline.ts
+│       │   │   ├── seed-data.ts
+│       │   │   ├── seed.ts
+│       │   │   └── verify-m0.ts
 │       │   ├── export-openapi.ts
 │       │   ├── health/
 │       │   │   └── health.controller.ts
 │       │   ├── http/
-│       │   │   └── error.filter.ts
+│       │   │   ├── error.filter.ts
+│       │   │   └── serialize-json.ts
 │       │   ├── infrastructure/
 │       │   │   ├── mysql-adapter.ts
 │       │   │   └── prisma-client.ts
 │       │   └── main.ts
 │       ├── test/
+│       │   ├── database/
+│       │   │   └── m0.test.ts
 │       │   ├── environment.test.ts
-│       │   └── health.test.ts
+│       │   ├── health.test.ts
+│       │   ├── seed-data.test.ts
+│       │   └── serialization.test.ts
 │       ├── tsconfig.json
 │       └── tsconfig.test.json
 ├── docs/
+│   ├── .prompt_template.md
 │   ├── adr/
 │   │   ├── 0001-order-concurrency-anchor.md
 │   │   ├── 0002-idempotency-persistence.md
@@ -66,7 +82,10 @@ nexus-crm/
 │   ├── engineering-initialization.md
 │   ├── permission-matrix.md
 │   ├── project-tree.txt
-│   └── requirements.md
+│   ├── requirements.md
+│   └── reviews/
+│       ├── m0-design-fix-summary.md
+│       └── m0-implementation.md
 ├── eslint.config.mjs
 ├── infra/
 │   ├── .env.example
@@ -85,9 +104,11 @@ nexus-crm/
 ├── prettier.config.mjs
 ├── README.md
 ├── scripts/
+│   ├── db-inspect.mjs
 │   ├── dev-api.mjs
 │   ├── init-env.mjs
 │   ├── project-tree.mjs
+│   ├── review-m0-sql.mjs
 │   ├── smoke.mjs
 │   └── use-local-tools.ps1
 └── tsconfig.base.json

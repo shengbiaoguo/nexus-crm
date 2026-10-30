@@ -1,6 +1,6 @@
 # Nexus CRM
 
-pnpm Monorepo 工程底座。当前只提供健康检查、Swagger、前端空壳、配置和工具链；**不等于完整 M0 业务底座完成**。没有用户、权限、订单模块，也没有业务数据库表。
+pnpm Monorepo 工程底座，已实现 M0 身份/平台数据库模型、首份迁移、受控字典 Seed 和数据库集成测试；**不等于完整 M0 业务底座完成**。提供健康检查、Swagger 和前端空壳，尚未实现 Auth/RBAC 执行逻辑或 CRM/订单/财务业务表。
 
 ## 环境
 
@@ -67,9 +67,23 @@ pnpm services:check
 
 ## Prisma / Migration
 
-Prisma CLI/Client/MySQL 官方适配器均锁定同一 7.x 版本。prisma.config.ts 配置连接 URL，schema 使用 mysql provider 和显式 prisma-client 输出。仅初始化配置，没有 model，因此不创建虚假的初始迁移；生成客户端不代表数据库已连接。
+Prisma CLI/Client/MySQL 官方适配器均锁定 7.10.1。prisma.config.ts 配置连接 URL，schema 使用 mysql provider 和显式 prisma-client 输出。首份 `20261030014538_init_m0` 包含十张 M0 表，已在确认空的本地库应用。详见 [SQL 审查与实施记录](docs/reviews/m0-implementation.md)。
 
-新增经批准的模型后，开发使用 `pnpm prisma:migrate:dev --name <change>`；生产使用 `pnpm prisma:migrate:deploy`。Schema 和真实生成的迁移 SQL 一同评审提交。禁止 db push、重置历史或承诺自动 down migration。详见 [ADR-004](docs/adr/0004-prisma-migration-strategy.md)。
+后续 Schema 变更先 validate，再使用 `pnpm prisma:migrate:dev --create-only --name <change>` 生成 SQL，审查后再应用。生产使用 `pnpm prisma:migrate:deploy`。Schema 和真实生成的迁移 SQL 一同评审提交。禁止 db push、重置历史或承诺自动 down migration。详见 [ADR-004](docs/adr/0004-prisma-migration-strategy.md)。
+
+```sh
+# 仅在确认的专用本地开发库进行迁移和初始化；遇非空未知库先停止核查。
+pnpm prisma:validate
+pnpm prisma:migrate:deploy
+pnpm prisma:generate
+pnpm prisma:seed
+pnpm test:db
+pnpm db:verify
+```
+
+基础 Seed 只初始化七种角色和权限/范围映射，不创建账号或分配用户角色；重跑不覆盖已修改的有效模板，冲突时失败。数据库测试 fixture 与 Seed 分离：主要通过事务回滚，仅按随机唯一标识清理测试自己创建的技术记录，禁止全表清空。`pnpm db:verify` 输出实库类型、索引、FK、CHECK 和数量到 artifacts/m0-database-verification.json。测试不自动迁移或重置库，执行前应人工确认本地目标。普通 `pnpm test` 不连接数据库。
+
+序列化：选出允许字段后用 serializeJson 将 BigInt 转十进制字符串、Date 转 UTC ISO 字符串；Json 写入显式区分 Prisma.DbNull（SQL NULL）与 Prisma.JsonNull（JSON null）。拒绝 undefined/非有限数字/未映射类实例，不把整个用户对象或密码哈希自动公开。MySQL 适配器固定 UTC 会话与日期转换。
 
 ## 项目依据及状态
 

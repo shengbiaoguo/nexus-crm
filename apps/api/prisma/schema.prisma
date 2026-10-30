@@ -1,4 +1,4 @@
-// Initialization only: intentionally no business or identity models/tables.
+// M0 only. Physical names are snake_case; application properties are camelCase.
 generator client {
   provider            = "prisma-client"
   output              = "../src/generated/prisma"
@@ -8,4 +8,199 @@ generator client {
 
 datasource db {
   provider = "mysql"
+}
+
+enum RecordStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum ScopeCode {
+  SELF_COLLABORATOR
+  TEAM
+  ASSIGNED_PROJECT
+  FINANCE_RELATED
+  ALL
+  IDENTITY
+  AUTHENTICATED
+  CATALOG
+}
+
+enum IdempotencyStatus {
+  PROCESSING
+  COMPLETED
+}
+
+enum AttemptStatus {
+  STARTED
+  SUCCEEDED
+  REPLAYED
+  FAILED
+  UNKNOWN
+}
+
+model User {
+  id                BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  loginName         String           @unique(map: "users_login_name_key") @map("login_name") @db.VarChar(100)
+  passwordHash      String           @map("password_hash") @db.VarChar(255)
+  name              String           @db.VarChar(100)
+  departmentId      BigInt?          @map("department_id") @db.UnsignedBigInt
+  status            RecordStatus     @default(ACTIVE)
+  credentialVersion Int              @default(1) @map("credential_version") @db.UnsignedInt
+  version           Int              @default(1) @db.UnsignedInt
+  createdAt         DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
+  department        Department?      @relation(fields: [departmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  roles             UserRole[]
+  refreshSessions   RefreshSession[]
+  auditLogs         AuditLog[]
+  commandAttempts   CommandAttempt[]
+
+  @@index([departmentId, status], map: "users_department_status_idx")
+  @@map("users")
+}
+
+model Department {
+  id        BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
+  parentId  BigInt?      @map("parent_id") @db.UnsignedBigInt
+  name      String       @db.VarChar(100)
+  status    RecordStatus @default(ACTIVE)
+  version   Int          @default(1) @db.UnsignedInt
+  createdAt DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  parent    Department?  @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  children  Department[] @relation("DepartmentTree")
+  users     User[]
+
+  @@index([parentId], map: "departments_parent_idx")
+  @@map("departments")
+}
+
+model Role {
+  id          BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  code        String           @unique(map: "roles_code_key") @db.VarChar(64)
+  name        String           @db.VarChar(100)
+  status      RecordStatus     @default(ACTIVE)
+  version     Int              @default(1) @db.UnsignedInt
+  createdAt   DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  code        String           @unique(map: "permissions_code_key") @db.VarChar(100)
+  description String           @db.VarChar(255)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model UserRole {
+  userId    BigInt   @map("user_id") @db.UnsignedBigInt
+  roleId    BigInt   @map("role_id") @db.UnsignedBigInt
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([userId, roleId])
+  @@index([roleId], map: "user_roles_role_idx")
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       BigInt     @map("role_id") @db.UnsignedBigInt
+  permissionId BigInt     @map("permission_id") @db.UnsignedBigInt
+  scopeCode    ScopeCode  @map("scope_code")
+  createdAt    DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId], map: "role_permissions_permission_idx")
+  @@map("role_permissions")
+}
+
+model RefreshSession {
+  id        BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  userId    BigInt    @map("user_id") @db.UnsignedBigInt
+  tokenHash String    @unique(map: "refresh_sessions_token_hash_key") @map("token_hash") @db.Char(64)
+  expiresAt DateTime  @map("expires_at") @db.DateTime(3)
+  revokedAt DateTime? @map("revoked_at") @db.DateTime(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId, revokedAt], map: "refresh_sessions_user_revoked_idx")
+  @@index([expiresAt], map: "refresh_sessions_expiry_idx")
+  @@map("refresh_sessions")
+}
+
+model AuditLog {
+  id          BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  actorId     BigInt?         @map("actor_id") @db.UnsignedBigInt
+  systemActor String?         @map("system_actor") @db.VarChar(100)
+  action      String          @db.VarChar(100)
+  entityType  String          @map("entity_type") @db.VarChar(64)
+  entityId    String          @map("entity_id") @db.VarChar(100)
+  beforeJson  Json?           @map("before_json")
+  afterJson   Json?           @map("after_json")
+  requestId   String          @map("request_id") @db.VarChar(100)
+  attemptId   String?         @map("attempt_id") @db.Char(36)
+  createdAt   DateTime        @default(now()) @map("created_at") @db.DateTime(3)
+  actor       User?           @relation(fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  attempt     CommandAttempt? @relation(fields: [attemptId], references: [attemptId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([entityType, entityId, createdAt], map: "audit_logs_entity_time_idx")
+  @@index([actorId, createdAt], map: "audit_logs_actor_time_idx")
+  @@index([requestId], map: "audit_logs_request_idx")
+  @@index([attemptId], map: "audit_logs_attempt_idx")
+  @@map("audit_logs")
+}
+
+model IdempotencyRecord {
+  id                 BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  scope              String            @db.VarChar(64)
+  key                String            @db.Char(36)
+  requestHash        String            @map("request_hash") @db.Char(64)
+  fingerprintVersion Int               @default(1) @map("fingerprint_version") @db.UnsignedSmallInt
+  status             IdempotencyStatus @default(PROCESSING)
+  httpStatus         Int?              @map("http_status") @db.UnsignedSmallInt
+  responseBody       Json?             @map("response_body")
+  createdAt          DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+  completedAt        DateTime?         @map("completed_at") @db.DateTime(3)
+  expiresAt          DateTime          @map("expires_at") @db.DateTime(3)
+
+  @@unique([scope, key], map: "idempotency_records_scope_key_key")
+  @@index([status, expiresAt], map: "idempotency_records_status_expiry_idx")
+  @@map("idempotency_records")
+}
+
+model CommandAttempt {
+  id               BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  attemptId        String        @unique(map: "command_attempts_attempt_id_key") @map("attempt_id") @db.Char(36)
+  actorId          BigInt?       @map("actor_id") @db.UnsignedBigInt
+  systemActor      String?       @map("system_actor") @db.VarChar(100)
+  operationId      String        @map("operation_id") @db.VarChar(100)
+  entityType       String        @map("entity_type") @db.VarChar(64)
+  entityId         String        @map("entity_id") @db.VarChar(100)
+  requestId        String        @map("request_id") @db.VarChar(100)
+  idempotencyScope String        @map("idempotency_scope") @db.VarChar(64)
+  idempotencyKey   String        @map("idempotency_key") @db.Char(36)
+  requestHash      String        @map("request_hash") @db.Char(64)
+  status           AttemptStatus @default(STARTED)
+  startedAt        DateTime      @default(now()) @map("started_at") @db.DateTime(3)
+  finishedAt       DateTime?     @map("finished_at") @db.DateTime(3)
+  errorCode        String?       @map("error_code") @db.VarChar(100)
+  resultRef        String?       @map("result_ref") @db.VarChar(255)
+  actor            User?         @relation(fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  auditLogs        AuditLog[]
+
+  @@index([status, startedAt], map: "command_attempts_status_started_idx")
+  @@index([idempotencyScope, idempotencyKey], map: "command_attempts_scope_key_idx")
+  @@index([actorId], map: "command_attempts_actor_idx")
+  @@map("command_attempts")
 }

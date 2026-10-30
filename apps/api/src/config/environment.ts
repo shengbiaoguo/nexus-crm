@@ -1,5 +1,7 @@
 import { config } from 'dotenv';
 import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { z } from 'zod';
 
 const schema = z.object({
@@ -30,6 +32,13 @@ export function validateEnvironment(values: NodeJS.ProcessEnv): Environment {
 }
 
 export function loadEnvironment(): Environment {
-  config({ path: fileURLToPath(new URL('../../../../.env', import.meta.url)), quiet: true });
+  // Compiled integration tests add another directory level; locate the workspace marker.
+  let directory = dirname(fileURLToPath(import.meta.url));
+  while (!existsSync(join(directory, 'pnpm-workspace.yaml'))) {
+    const parent = dirname(directory);
+    if (parent === directory) throw new Error('Workspace configuration root not found');
+    directory = parent;
+  }
+  config({ path: join(directory, '.env'), quiet: true });
   return validateEnvironment(process.env);
 }

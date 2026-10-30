@@ -15,5 +15,7 @@ export function createMysqlAdapter(databaseUrl: string): PrismaMariaDb {
     database: decodeURIComponent(url.pathname.slice(1)),
     connectionLimit: 5,
     connectTimeout: 5000,
+    timezone: 'Z',
+    initSql: "SET time_zone = '+00:00'",
   });
 }

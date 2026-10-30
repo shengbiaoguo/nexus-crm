@@ -21,6 +21,7 @@ jobs:
       - run: pnpm env:init
       - run: pnpm prisma:validate
       - run: pnpm prisma:generate
+      - run: node scripts/review-m0-sql.mjs
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck

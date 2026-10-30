@@ -6,6 +6,6 @@ config({ path: fileURLToPath(new URL('../../.env', import.meta.url)), quiet: tru
 
 export default defineConfig({
   schema: 'prisma/schema.prisma',
-  migrations: { path: 'prisma/migrations' },
+  migrations: { path: 'prisma/migrations', seed: 'node dist/database/seed.js' },
   datasource: { url: env('DATABASE_URL') },
 });

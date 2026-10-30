@@ -3,7 +3,7 @@
 ## Scope and architecture
 
 - Modular monolith: apps/api (NestJS), apps/admin (React), packages/shared (transport contracts only), infra and scripts. Single-enterprise MySQL 8.4; Redis is auxiliary, never authoritative for money or approvals.
-- Current task is engineering initialization only. Do not implement users, roles, customers, orders, approval policies or business tables until explicitly requested. Initialization is not completion of all M0 requirements.
+- Current scope includes M0 identity/platform models, reviewed Migration, controlled dictionary seed and database tests (user authorization 2026-10-30). Do not implement Auth/RBAC execution logic, customers, orders or other business modules until requested. M0 tables do not imply complete M0 business behavior.
 - Node 24.22.2 LTS, pnpm 10.34.9, TypeScript strict, ESM/NodeNext on API; exact direct dependency versions and committed pnpm lockfile. Do not silently change major versions.
 
 ## Sources and priority
