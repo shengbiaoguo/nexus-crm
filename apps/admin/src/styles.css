@@ -1,0 +1,13 @@
+body {
+  margin: 0;
+  min-width: 320px;
+}
+.shell {
+  min-height: 100vh;
+  padding: 64px 24px;
+}
+.shell > main {
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+}

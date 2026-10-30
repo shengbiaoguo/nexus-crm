@@ -1,0 +1,71 @@
+﻿{
+  "node": "24.22.2",
+  "nodeLts": "Krypton",
+  "pnpm": "10.34.9",
+  "source": "pnpm list --recursive --depth 0 --json",
+  "workspaces": [
+    {
+      "name": "nexus-crm",
+      "version": "0.0.0",
+      "dependencies": {},
+      "devDependencies": {
+        "@eslint/js": "10.0.1",
+        "@types/node": "24.19.2",
+        "eslint": "10.13.0",
+        "eslint-config-prettier": "10.1.8",
+        "eslint-plugin-react-hooks": "7.1.1",
+        "eslint-plugin-react-refresh": "0.5.7",
+        "prettier": "3.9.10",
+        "typescript": "6.0.3",
+        "typescript-eslint": "8.72.1"
+      }
+    },
+    {
+      "name": "@nexus/admin",
+      "version": "0.0.0",
+      "dependencies": {
+        "@nexus/shared": "link:../../packages/shared",
+        "antd": "6.6.8",
+        "react": "19.3.1",
+        "react-dom": "19.3.1"
+      },
+      "devDependencies": {
+        "@types/react": "19.2.2",
+        "@types/react-dom": "19.2.2",
+        "@vitejs/plugin-react": "6.1.2",
+        "vite": "8.3.5"
+      }
+    },
+    {
+      "name": "@nexus/api",
+      "version": "0.0.0",
+      "dependencies": {
+        "@nestjs/common": "12.3.2",
+        "@nestjs/core": "12.3.2",
+        "@nestjs/platform-express": "12.3.2",
+        "@nestjs/swagger": "12.0.5",
+        "@nexus/shared": "link:../../packages/shared",
+        "@prisma/adapter-mariadb": "7.10.1",
+        "@prisma/client": "7.10.1",
+        "class-transformer": "0.5.1",
+        "class-validator": "0.15.1",
+        "dotenv": "18.0.9",
+        "ioredis": "6.0.0",
+        "reflect-metadata": "0.2.2",
+        "rxjs": "7.8.2",
+        "zod": "4.6.7"
+      },
+      "devDependencies": {
+        "@nestjs/testing": "12.3.2",
+        "@types/express": "5.0.6",
+        "prisma": "7.10.1"
+      }
+    },
+    {
+      "name": "@nexus/shared",
+      "version": "0.0.0",
+      "dependencies": {},
+      "devDependencies": {}
+    }
+  ]
+}

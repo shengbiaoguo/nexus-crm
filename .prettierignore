@@ -1,0 +1,16 @@
+node_modules
+.tools
+.pnpm-store
+**/dist
+**/dist-test
+**/generated
+artifacts
+pnpm-lock.yaml
+.docs-baseline.json
+# Preserve all pre-existing design documents byte-for-byte.
+docs/requirements.md
+docs/permission-matrix.md
+docs/data-model.md
+docs/api-design.md
+docs/design-review-changelog.md
+docs/adr

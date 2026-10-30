@@ -1,0 +1,93 @@
+nexus-crm/
+├── .editorconfig
+├── .env.example
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+├── .gitignore
+├── .node-version
+├── .npmrc
+├── .nvmrc
+├── .prettierignore
+├── AGENTS.md
+├── apps/
+│   ├── admin/
+│   │   ├── index.html
+│   │   ├── package.json
+│   │   ├── src/
+│   │   │   ├── App.tsx
+│   │   │   ├── health.d.mts
+│   │   │   ├── health.mjs
+│   │   │   ├── main.tsx
+│   │   │   └── styles.css
+│   │   ├── test/
+│   │   │   └── health.test.mjs
+│   │   ├── tsconfig.json
+│   │   └── vite.config.ts
+│   └── api/
+│       ├── package.json
+│       ├── prisma/
+│       │   ├── migrations/
+│       │   │   └── README.md
+│       │   └── schema.prisma
+│       ├── prisma.config.ts
+│       ├── src/
+│       │   ├── app.module.ts
+│       │   ├── application.ts
+│       │   ├── check-services.ts
+│       │   ├── config/
+│       │   │   └── environment.ts
+│       │   ├── export-openapi.ts
+│       │   ├── health/
+│       │   │   └── health.controller.ts
+│       │   ├── http/
+│       │   │   └── error.filter.ts
+│       │   ├── infrastructure/
+│       │   │   ├── mysql-adapter.ts
+│       │   │   └── prisma-client.ts
+│       │   └── main.ts
+│       ├── test/
+│       │   ├── environment.test.ts
+│       │   └── health.test.ts
+│       ├── tsconfig.json
+│       └── tsconfig.test.json
+├── docs/
+│   ├── adr/
+│   │   ├── 0001-order-concurrency-anchor.md
+│   │   ├── 0002-idempotency-persistence.md
+│   │   ├── 0003-audit-and-operational-logs.md
+│   │   ├── 0004-prisma-migration-strategy.md
+│   │   ├── 0005-idempotency-scope-clarification.md
+│   │   └── README.md
+│   ├── api-design.md
+│   ├── data-model.md
+│   ├── dependency-versions.json
+│   ├── design-review-changelog.md
+│   ├── engineering-initialization.md
+│   ├── permission-matrix.md
+│   ├── project-tree.txt
+│   └── requirements.md
+├── eslint.config.mjs
+├── infra/
+│   ├── .env.example
+│   ├── compose.yaml
+│   └── README.md
+├── package.json
+├── packages/
+│   └── shared/
+│       ├── package.json
+│       ├── src/
+│       │   └── index.ts
+│       ├── test/
+│       └── tsconfig.json
+├── pnpm-lock.yaml
+├── pnpm-workspace.yaml
+├── prettier.config.mjs
+├── README.md
+├── scripts/
+│   ├── dev-api.mjs
+│   ├── init-env.mjs
+│   ├── project-tree.mjs
+│   ├── smoke.mjs
+│   └── use-local-tools.ps1
+└── tsconfig.base.json

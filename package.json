@@ -1,0 +1,40 @@
+{
+  "name": "nexus-crm",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.9",
+  "engines": {
+    "node": ">=24.22.2 <25",
+    "pnpm": "10.34.9"
+  },
+  "scripts": {
+    "env:init": "node scripts/init-env.mjs",
+    "dev": "pnpm --filter @nexus/shared build && pnpm --parallel --filter @nexus/api --filter @nexus/admin dev",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "pnpm --filter @nexus/shared build && pnpm -r typecheck",
+    "build": "pnpm -r build",
+    "test": "pnpm --filter @nexus/shared build && pnpm -r test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "smoke": "node scripts/smoke.mjs",
+    "openapi:export": "pnpm --filter @nexus/api openapi:export",
+    "prisma:validate": "pnpm --filter @nexus/api prisma:validate",
+    "prisma:generate": "pnpm --filter @nexus/api prisma:generate",
+    "prisma:migrate:dev": "pnpm --filter @nexus/api prisma:migrate:dev",
+    "prisma:migrate:deploy": "pnpm --filter @nexus/api prisma:migrate:deploy",
+    "services:check": "pnpm --filter @nexus/api services:check",
+    "check": "pnpm lint && pnpm typecheck && pnpm build && pnpm test && pnpm smoke"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.2",
+    "eslint": "10.13.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.7",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1"
+  }
+}

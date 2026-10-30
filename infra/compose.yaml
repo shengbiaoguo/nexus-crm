@@ -1,0 +1,40 @@
+# Optional isolated local services. Normal development connects to existing host services.
+# Never starts automatically. Requires infra/.env with your own local credentials.
+name: nexus-crm-local
+services:
+  mysql:
+    image: mysql:8.4.7
+    ports:
+      - '127.0.0.1:3307:3306'
+    environment:
+      MYSQL_DATABASE: nexus_crm
+      MYSQL_USER: nexus
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set a local MYSQL_PASSWORD in infra/.env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set a local MYSQL_ROOT_PASSWORD in infra/.env}
+    command: ['--character-set-server=utf8mb4', '--collation-server=utf8mb4_0900_ai_ci']
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'MYSQL_PWD="$${MYSQL_PASSWORD}" mysql --protocol=TCP -h 127.0.0.1 -u "$${MYSQL_USER}" -e "SELECT 1" "$${MYSQL_DATABASE}"',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  redis:
+    image: redis:8.2.2
+    ports:
+      - '127.0.0.1:6380:6379'
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+volumes:
+  mysql-data:
+  redis-data:
