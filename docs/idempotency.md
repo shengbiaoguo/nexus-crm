@@ -6,6 +6,10 @@
 
 ## 服务入口
 
+2026-10-31 T03 工程审查及创建契约补强见 [T03 记录](t03-creation-review.md)。新建实体必须同时声明服务端 `createsEntity:true` 和 `entityId:'new'`；`new` 保留给此模式。entityType/operationId 及 targets（包含已有父 ID）稳定进入现有 v1 指纹，生成 ID 不进入请求指纹。客户端不能提交这些组件配置。
+
+创建回调在同一 tx 中插入并返回 201、规范无符号 BIGINT 字符串 id，且 responseFields 必须保存 id；成功 AuditLog 记录该真实 ID，尝试仍保留 new 并通过 resultRef 关联。首次执行、普通重放、提交未知恢复和核对器消费 new 结果共用相同的 201/ID 校验。恢复看到原尝试已 SUCCEEDED 时仍验证创建结果；无法核实的已完成摘要返回 IDEMPOTENCY_RESULT_UNKNOWN，保留既有事实，不自动再创建。无需新增列或改变 v1 hash、旧非创建命令、锁/审计/保留协议。
+
 业务模块导入应用中同一 DatabaseModule 注册对象对应的 IdempotencyModule，并注入 IdempotencyService。调用 `execute(command)` 时提供以下**服务端定义**：
 
 | 字段                            | 责任                                                                                                                   |

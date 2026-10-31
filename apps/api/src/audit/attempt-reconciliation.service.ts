@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { IdempotencyStore } from '../idempotency/idempotency.store.js';
 import { z } from 'zod';
-import { responseSnapshot } from '../idempotency/idempotency.contract.js';
+import { creationResultId, responseSnapshot } from '../idempotency/idempotency.contract.js';
 
 @Injectable()
 export class AttemptReconciliationService {
@@ -75,13 +75,14 @@ export class AttemptReconciliationService {
               [200, 201, 204].includes(record.httpStatus)
             ) {
               try {
-                responseSnapshot(
+                const body = responseSnapshot(
                   record.responseBody,
                   record.responseBody && typeof record.responseBody === 'object'
                     ? Object.keys(record.responseBody)
                     : [],
                   record.httpStatus,
                 );
+                if (attempt.entityId === 'new') creationResultId(record.httpStatus, body);
                 validResult = true;
               } catch {
                 /* Invalid persisted summaries are not success evidence. */

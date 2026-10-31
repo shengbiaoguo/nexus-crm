@@ -109,6 +109,18 @@ export function userLockPlan(actorId: string, requested: readonly UserLock[] = [
 }
 
 export type Summary = Record<string, string | number | boolean | null>;
+/** The creation adapter accepts only a real canonical unsigned ID in a 201 snapshot. */
+export function creationResultId(status: number, body: Summary | null): string {
+  const id = body?.['id'];
+  if (
+    status !== 201 ||
+    typeof id !== 'string' ||
+    !/^[1-9][0-9]{0,19}$/.test(id) ||
+    BigInt(id) > 18446744073709551615n
+  )
+    throw new TypeError('Creation requires 201 and a canonical unsigned ID');
+  return id;
+}
 const sensitive =
   /password|secret|token|credential|cookie|authorization|bank|phone|email|contact|address|payload|requestbody/i;
 

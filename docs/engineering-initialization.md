@@ -155,3 +155,10 @@ Compose 是可选隔离本地服务配置（MySQL 8.4.7、Redis 8.2.2），默�
 - 客户/商机 SQL where、列表/count/摘要详情同一 RepeatableRead 快照；联系人/跟进按真实父链限定当前客户范围。TEAM 完整检查有效祖先链，修复命中 actor 部门后仍需检查更上级状态的边界；未知动作和错误 action/scope 配对拒绝。
 - 预声明用户/角色/部门/客户及 Opportunity→Contact→FollowUp 锁，所有写方在同一 ReadCommitted 事务内当前读、重验完整集合；AuditService 增加显式隔离级别记录/断言。订单表尚不存在，实际订单锁和来源链留 T13，未造占位表或空实现。
 - 冻结锁安装、Prisma validate、M0/M1 SQL 审查、lint/typecheck/build、API 33/Admin 1 普通测试、真实 MySQL 69 项、编译后 smoke/OpenAPI 通过；写入口收紧后另复验 15 项实库专项通过。首轮 lint 未使用导入和部门夹具清理顺序失败均已修复，约束未放宽。文件、限制、真实并发证据及未执行项见 [T05 记录](t05-sales-access.md)；无自动 Git Commit。下一步先补 T03 审查，再满足 T06 完整门禁，本次停止。
+
+## 2026-10-31：T03 创建适配工程审查
+
+- 复用已经存在的 createsEntity / createdEntityId 窄适配，补齐可追溯审查与负向测试；稳定 new/父对象请求目标和真实新 ID 分离，原 v1 指纹算法与历史迁移不变，不新增 Schema/seed 或业务路由。
+- 修复 new 目标遗漏显式创建模式，以及首次/重放/恢复（含原尝试已 SUCCEEDED）对创建 201/规范字符串 ID 的校验不一致；已有核对器的 new 结果消费分支复用同一校验，不扩展 T02 调度或其他专项。审计原 actor/request/type/operation/target/state 匹配与事务失败标记保留。
+- 新增普通 3 项与真实 MySQL 8 项创建契约测试，使用精确随机 Contact/父客户及用户权限夹具，验证并发一次插入、真实审计/resultRef、回滚释放 Key、父对象/DTO 冲突、撤权与 cv 失效、独立 client 提交恢复、损坏证据拒绝和上下文错配；完整执行结果、局部修复及门禁结论见 [T03 工程审查记录](t03-creation-review.md)。
+- 本轮不创建库、启动服务、改生产数据、应用 Migration 或自动 Git Commit，保留原有用户暂存区。T03 验收通过后下一项为 T06，不在本次自动执行。

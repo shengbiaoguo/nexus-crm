@@ -66,6 +66,8 @@ CLI 输出仅 examined/confirmed/unknown/nextCursor，不输出响应正文、�
 
 ## 5. 创建命令审计适配
 
+2026-10-31 T03 窄适配代码审查已形成 [可追溯记录](t03-creation-review.md)：补齐 new/createsEntity 双向声明、首次/重放/恢复（含原 SUCCEEDED）及 new 结果核对的一致校验。新状态码/ID、上下文错配、真实 Contact 创建、角色/归属/cv 撤权等负向测试已补充；不新增 Schema/Migration，不改变 v1 指纹。下方保留最初适配说明；T02 其他专项仍按原进度独立验收。
+
 IdempotentCommand 增加服务端 `createsEntity:true`，要求 entityId=`new`，固定 operationId/父对象 targets/规范 DTO 进入现有 fingerprint v1。不得每次请求随机生成目标 ID，也不得在幂等事务外预创建业务实体。既有非创建命令的 v1 指纹输入和重放语义保持不变。
 
 首次 execute 在现有 tx 插入实体后，必须返回 201 和包含规范无符号 BigInt 字符串 id 的白名单标量摘要。AuditService 的 createdEntityId 适配仅接受 new-target、同 actor/requestId/操作/attempt 上下文和匹配 resultRef；attempt 保留原请求目标，AuditLog.entityId 写真实生成 ID，attempt.resultRef=`entityType:id`。业务写入、成功审计、结果和 attempt 成功同事务，解析/审计失败使事务不可提交。
