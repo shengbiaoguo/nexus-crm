@@ -1,4 +1,5 @@
 import type { Grant } from './permission.policy.js';
+import { ApiException } from '../http/api.exception.js';
 
 const ordinary = ['SELF_COLLABORATOR', 'TEAM', 'ALL'] as const;
 const managed = ['TEAM', 'ALL'] as const;
@@ -49,4 +50,30 @@ export function visibleSalesRoot(
     (scopes.includes('SELF_COLLABORATOR') &&
       (root.ownerId === actorId || root.collaboratorIds.includes(actorId)))
   );
+}
+
+/** A valid TEAM path includes every active ancestor up to the actual root. */
+export function teamDepartmentIds(
+  actorDepartment: bigint | null,
+  departments: readonly { id: bigint; parentId: bigint | null; status: string }[],
+): bigint[] {
+  if (departments.length > 1000)
+    throw new ApiException('SERVICE_UNAVAILABLE', 'Organization exceeds authorization limit');
+  if (actorDepartment === null) return [];
+  const tree = new Map(departments.map((row) => [row.id, row]));
+  const path = (start: bigint) => {
+    const seen = new Set<bigint>();
+    let current: bigint | null = start;
+    while (current !== null) {
+      if (seen.has(current))
+        throw new ApiException('SERVICE_UNAVAILABLE', 'Invalid organization hierarchy');
+      const row = tree.get(current);
+      if (!row || row.status !== 'ACTIVE') return null;
+      seen.add(current);
+      current = row.parentId;
+    }
+    return seen;
+  };
+  if (!path(actorDepartment)) return [];
+  return departments.filter(({ id }) => path(id)?.has(actorDepartment)).map(({ id }) => id);
 }

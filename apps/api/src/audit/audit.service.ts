@@ -62,11 +62,17 @@ function json(snapshot: Snapshot | undefined) {
 @Injectable()
 export class AuditService {
   private readonly transactions = new WeakSet<object>();
+  private readonly isolation = new WeakMap<object, Prisma.TransactionIsolationLevel>();
   private readonly failedTransactions = new WeakSet<object>();
   constructor(private readonly logger: StructuredLogger) {}
 
-  assertTransaction(tx: Prisma.TransactionClient): void {
+  assertTransaction(
+    tx: Prisma.TransactionClient,
+    isolation?: Prisma.TransactionIsolationLevel,
+  ): void {
     this.transactionOnly(tx);
+    if (isolation && this.isolation.get(tx) !== isolation)
+      throw new TypeError(`Transaction requires explicit ${isolation} isolation`);
   }
 
   /** Registers the exact interactive tx; Prisma 7 also exposes $transaction on transaction clients. */
@@ -81,12 +87,14 @@ export class AuditService {
   ): Promise<T> {
     return client.$transaction(async (tx) => {
       this.transactions.add(tx);
+      if (options?.isolationLevel) this.isolation.set(tx, options.isolationLevel);
       try {
         const result = await work(tx);
         if (this.failedTransactions.has(tx)) throw this.unavailable();
         return result;
       } finally {
         this.transactions.delete(tx);
+        this.isolation.delete(tx);
         this.failedTransactions.delete(tx);
       }
     }, options);

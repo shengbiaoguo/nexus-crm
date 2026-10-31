@@ -39,8 +39,13 @@ test('real MySQL tables, types, migration checksum, RESTRICT FKs and actor CHECK
       '_prisma_migrations',
       'audit_logs',
       'command_attempts',
+      'customer_contacts',
+      'customer_members',
+      'customers',
       'departments',
+      'follow_ups',
       'idempotency_records',
+      'opportunities',
       'permissions',
       'refresh_sessions',
       'role_permissions',
@@ -50,9 +55,34 @@ test('real MySQL tables, types, migration checksum, RESTRICT FKs and actor CHECK
     ],
   );
   const constraints = await client.$queryRaw<
-    Array<{ delete_rule: string; update_rule: string }>
-  >`SELECT DELETE_RULE AS delete_rule, UPDATE_RULE AS update_rule FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE()`;
-  assert.equal(constraints.length, 10);
+    Array<{ name: string; table_name: string; delete_rule: string; update_rule: string }>
+  >`SELECT CONSTRAINT_NAME AS name, TABLE_NAME AS table_name, DELETE_RULE AS delete_rule, UPDATE_RULE AS update_rule FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE()`;
+  const crmTables = [
+    'customers',
+    'customer_members',
+    'customer_contacts',
+    'opportunities',
+    'follow_ups',
+  ];
+  assert.deepEqual(
+    constraints
+      .filter((row) => !crmTables.includes(row.table_name))
+      .map((row) => row.name)
+      .sort(),
+    [
+      'audit_logs_actor_id_fkey',
+      'audit_logs_attempt_id_fkey',
+      'command_attempts_actor_id_fkey',
+      'departments_parent_id_fkey',
+      'refresh_sessions_user_id_fkey',
+      'role_permissions_permission_id_fkey',
+      'role_permissions_role_id_fkey',
+      'user_roles_role_id_fkey',
+      'user_roles_user_id_fkey',
+      'users_department_id_fkey',
+    ],
+  );
+  assert.equal(constraints.length, 22);
   assert.ok(
     constraints.every((row) => row.delete_rule === 'RESTRICT' && row.update_rule === 'RESTRICT'),
   );
@@ -62,6 +92,10 @@ test('real MySQL tables, types, migration checksum, RESTRICT FKs and actor CHECK
   assert.deepEqual(checks.map((row) => row.name).sort(), [
     'audit_logs_actor_check',
     'command_attempts_actor_check',
+    'customer_contacts_primary_check',
+    'customer_contacts_reachability_check',
+    'customers_credit_code_check',
+    'opportunities_closure_check',
   ]);
   const columns = await client.$queryRaw<
     Array<{ name: string; type: string }>
@@ -80,7 +114,7 @@ test('all application table defaults and character columns use the agreed databa
   const tables = await client.$queryRaw<
     Array<{ collation: string }>
   >`SELECT TABLE_COLLATION AS collation FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME <> '_prisma_migrations'`;
-  assert.equal(tables.length, 10);
+  assert.equal(tables.length, 15);
   assert.ok(tables.every((row) => row.collation === 'utf8mb4_0900_ai_ci'));
   const columns = await client.$queryRaw<
     Array<{ collation: string }>

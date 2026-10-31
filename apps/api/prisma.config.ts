@@ -7,5 +7,10 @@ config({ path: fileURLToPath(new URL('../../.env', import.meta.url)), quiet: tru
 export default defineConfig({
   schema: 'prisma/schema.prisma',
   migrations: { path: 'prisma/migrations', seed: 'node dist/database/seed.js' },
-  datasource: { url: env('DATABASE_URL') },
+  datasource: {
+    url: env('DATABASE_URL'),
+    ...(process.env['SHADOW_DATABASE_URL']
+      ? { shadowDatabaseUrl: process.env['SHADOW_DATABASE_URL'] }
+      : {}),
+  },
 });

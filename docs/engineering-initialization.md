@@ -136,3 +136,22 @@ Compose 是可选隔离本地服务配置（MySQL 8.4.7、Redis 8.2.2），默�
 - 实际最终通过：Node 24.22.2/pnpm 10.34.9 冻结锁离线安装、lint、typecheck、build、test:m0（API 普通 28 / Admin 1 / 本地 MySQL 39，零失败零跳过）、编译后 API smoke、OpenAPI 导出、Prisma validate 和迁移 SQL 静态审查。新增普通测试 4 项、真实数据库测试 8 项，覆盖授权/锁竞争/并发创建/真实审计目标/回滚/丢失提交确认/证据核对/Bootstrap 并发及故障；CLI 无显式授权或非法游标会安全拒绝且不打印标准输入。
 - 本地 MySQL 8.4.13 SELECT VERSION() 与 Redis PING 通过；实际调用 audit:reconcile --after-id=18446744073709551615 返回 examined=0/nextCursor=null，不更改既有尝试。正常核对修改路径在精确 attemptIds 限定的随机实库夹具中验证。生产、远端 CI、真实进程崩溃/代理断网、全新/历史库迁移与备份恢复未运行，未宣称已验收。
 - 残留边界：Customer repository/列表 SQL、完整订单锚点与跨业务竞争、身份管理写接口/自授/最后负责人、部署调度与生产 Bootstrap 接入仍需对应后续任务；DC-005/010 等业务未决门禁未绕过。Admin 既有大包提示和 @scarf/scarf 构建脚本忽略提示仍存在。本轮完成后停止，不启动 Customer 模块。
+
+## 2026-10-30：T04 CRM 持久化批次 A
+
+- 沿用现有 Prisma 7 / MySQL 8.4 / adapter-mariadb，未换版本或重复初始化 M0。增加五个 CRM 模型及 `20261030090155_m1_crm`；生成 SQL 在应用前补充显式 collation、主联系人 STORED 生成列和四个 CHECK，原因及最终映射见 data-model §12.4。
+- 原配置只有 dev，本次在明确会话授权后创建独立 shadow、空库、历史 M0 升级库，未重置原库或启动服务。Prisma config 增加可选 SHADOW_DATABASE_URL，示例只放占位符；生成辅助列在客户端忽略，实库及迁移 replay 的 Schema diff 均为空。
+- 开发库真实 MySQL 44 项、空库/历史库各 11 项通过，历史行摘要和 checksum 保持；冻结锁安装、Prisma validate、SQL 审查、lint/typecheck/build、普通 API 28/Admin 1、编译后 smoke/OpenAPI 通过。完整证据与未运行边界见 [T04 记录](t04-persistence.md)，未执行 T05～T07、生产或 Git Commit。
+
+## 2026-10-30：T01 最小受控身份管理
+
+- 复用既有首位负责人 Bootstrap，不改 Schema/迁移/seed；增加显式无角色员工创建模式，复用 scrypt 与系统审计，不自动创建真实账号。增加角色替换、停用及供版本化命令使用的最小管理状态读取，不开放完整身份/部门/模板编辑。
+- 复用同一 Database/Auth/Idempotency 注册对象、固定身份权限、审计、错误及写锁；写锁计划允许预声明新增角色和受保护角色 UPDATE 模式，其余默认 SHARE 不变。保护真实角色授权、禁止自授、最后负责人、事务内重验、撤权后重放及审计失败回滚均有实库证据。
+- 数据库测试文件顺序运行以隔离 Bootstrap 的全局前置，测试内部真实事务仍并发。冻结锁安装、lint/typecheck/build、API 31/Admin 1 普通测试、MySQL 54 项、编译后 smoke/OpenAPI、Prisma validate、M0/M1 SQL 审查通过；未应用新迁移或提交 Git，详见 [T01 记录](t01-identity.md)。
+
+## 2026-10-30：T05 固定销售范围与真实 CRM 写锁
+
+- 复用已有 Policy、Authorization、Audit/Idempotency 和同一个数据库模块，新增内部 SalesAccessService / SalesWriteService / crm-target；没有 CRM Controller、业务状态 Service、Schema、Migration、seed 或依赖版本变化，保留 T01/T04 原有工作树修改。
+- 客户/商机 SQL where、列表/count/摘要详情同一 RepeatableRead 快照；联系人/跟进按真实父链限定当前客户范围。TEAM 完整检查有效祖先链，修复命中 actor 部门后仍需检查更上级状态的边界；未知动作和错误 action/scope 配对拒绝。
+- 预声明用户/角色/部门/客户及 Opportunity→Contact→FollowUp 锁，所有写方在同一 ReadCommitted 事务内当前读、重验完整集合；AuditService 增加显式隔离级别记录/断言。订单表尚不存在，实际订单锁和来源链留 T13，未造占位表或空实现。
+- 冻结锁安装、Prisma validate、M0/M1 SQL 审查、lint/typecheck/build、API 33/Admin 1 普通测试、真实 MySQL 69 项、编译后 smoke/OpenAPI 通过；写入口收紧后另复验 15 项实库专项通过。首轮 lint 未使用导入和部门夹具清理顺序失败均已修复，约束未放宽。文件、限制、真实并发证据及未执行项见 [T05 记录](t05-sales-access.md)；无自动 Git Commit。下一步先补 T03 审查，再满足 T06 完整门禁，本次停止。

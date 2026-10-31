@@ -22,6 +22,7 @@ jobs:
       - run: pnpm prisma:validate
       - run: pnpm prisma:generate
       - run: node scripts/review-m0-sql.mjs
+      - run: node scripts/review-m1-sql.mjs
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
@@ -74,6 +75,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm prisma:generate
       - run: node scripts/review-m0-sql.mjs
+      - run: node scripts/review-m1-sql.mjs
       # Only this explicitly provisioned, empty CI database receives migrate deploy/seed.
       - run: pnpm prisma:migrate:deploy
       - run: pnpm build

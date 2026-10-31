@@ -56,9 +56,9 @@
 | D-03 合同付款条款               | T12/14/15                    | 字段/到期基础/首付定义、计划与合同一致性、create/PATCH/submit 例子及证据内容绑定 |
 | D-04 来源订单唯一性/草稿修改    | T12/14                       | 所有订单唯一还是有效订单唯一；终态后重建；明细差异许可；对应数据库约束方案       |
 | D-05 审批等级/金额门槛/快照有效 | T12 单决策约束、T15/16       | 权限如何表达门槛、非提交人检查、过期/重提规则和唯一决定前提；不发明阈值          |
-| D-06 去重/人工提示（已批准）              | T06                          | 归一化例子、可见范围内提示、隐藏重复安全响应；不假造相似度业务算法               |
+| D-06 去重/人工提示（已批准）    | T06                          | 归一化例子、可见范围内提示、隐藏重复安全响应；不假造相似度业务算法               |
 | D-07 交接业务语义               | T09                          | 批量请求/响应、事务边界、责任人与可见性区别、协作保留和跨团队目标规则            |
-| D-08 CRM 枚举/字段（已批准）              | T04 受影响列、T06/07         | 最小字段/状态表、主联系人语义、跟进限制和终结规则                                |
+| D-08 CRM 枚举/字段（已批准）    | T04 受影响列、T06/07         | 最小字段/状态表、主联系人语义、跟进限制和终结规则                                |
 
 业务负责人给业务决定，后端将其落实为 API/权限/模型与验收样例，评审记录写回 design-review-changelog.md。并非要求本轮停止等答复：本轮准备可完成，但后续开发任务必须尊重这些门禁。
 
@@ -113,9 +113,9 @@ T03 先评审并实现一个窄范围创建适配：请求目标保持稳定的�
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Customer / customers                             | name、normalized_name、可空 credit_code；owner_id→User；status/version/created_by；名称不唯一                                                                                   | UK(credit_code)，多个 NULL 合法；IX(owner_id,status,created_at,id)、IX(normalized_name)；credit_code 归一化 D-06，status D-08                        |
 | CustomerMember / customer_members                | customer_id→Customer、user_id→User；协作语义/必要 member_role                                                                                                                   | 复合 PK 或 UK(customer_id,user_id)；IX(user_id,customer_id)；主负责人单独保存；资格/修改只经 assign                                                  |
-| CustomerContact / customer_contacts              | customer_id→Customer；name、可空 phone/email；主标记与 version、created_by                                                                                                      | IX(customer_id,created_at,id)；已批准至多一个有效主联系人；客户锁自动切换+可空生成客户键 UNIQUE，不能仅检查后 insert                                                           |
-| Opportunity / opportunities                      | customer_id→Customer、owner_id→User（仅责任）、title、description?、stage、close_reason?、closed_at?/version/created_by；expected_amount 等 D-01 后批次 B 扩展                                                                     | IX(customer_id,stage,created_at,id)、IX(owner_id,stage)；一个客户多商机；owner 不赋予独立可见性；stage/金额边界 D-08/01                              |
-| FollowUp / follow_ups                            | opportunity_id→Opportunity、author_id→User；content、next_follow_up_at?、correction_of_id?；customer 从商机推导，不冗余                                                                      | IX(opportunity_id,created_at,id)；只追加，不开放历史修改/删除；当前接口仅商机跟进                                                                    |
+| CustomerContact / customer_contacts              | customer_id→Customer；name、可空 phone/email；主标记与 version、created_by                                                                                                      | IX(customer_id,created_at,id)；已批准至多一个有效主联系人；客户锁自动切换+可空生成客户键 UNIQUE，不能仅检查后 insert                                 |
+| Opportunity / opportunities                      | customer_id→Customer、owner_id→User（仅责任）、title、description?、stage、close_reason?、closed_at?/version/created_by；expected_amount 等 D-01 后批次 B 扩展                  | IX(customer_id,stage,created_at,id)、IX(owner_id,stage)；一个客户多商机；owner 不赋予独立可见性；stage/金额边界 D-08/01                              |
+| FollowUp / follow_ups                            | opportunity_id→Opportunity、author_id→User；content、next_follow_up_at?、correction_of_id?；customer 从商机推导，不冗余                                                         | IX(opportunity_id,created_at,id)；只追加，不开放历史修改/删除；当前接口仅商机跟进                                                                    |
 | ServiceProduct / service_products                | code/name/base_price/status/version/created_by                                                                                                                                  | UK(code)；按 status/稳定分页评估 IX(status,created_at,id)；停用/改价不影响已复制报价                                                                 |
 | Quote / quotes                                   | opportunity_id→Opportunity；quote_no、current_version_no、version/created_by；status 如非必要从版本派生，不另造流程                                                             | UK(quote_no)；IX(opportunity_id,created_at,id)；quote 行锁分配版本号                                                                                 |
 | QuoteVersion / quote_versions                    | quote_id→Quote；version_no、锁 version、status、currency/amount、valid_until?、content_hash；submitted/accepted 元数据与 User FK                                                | UK(quote_id,version_no)；按接受/到期查询确定 IX(quote_id,status,valid_until)；证据形式/状态 D-02；提交后内容不可变                                   |
@@ -132,13 +132,13 @@ T03 先评审并实现一个窄范围创建适配：请求目标保持稳定的�
 
 ### 5.3 增量 Migration 批次与发布
 
-| 批次（将来由 Prisma 生成真实时间戳） | 内容与依赖                                                             | SQL/兼容性验收                                                                                                               |
-| ------------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| A `m1_crm`（T04）                    | Customer/Member/Contact/Opportunity/FollowUp；D-06/08 已批准；不含 expected_amount | 既有 M0 仅增加必要反向关系；空库从 M0 起升级、历史 M0 数据升级保留；真实 FK/UK/NULL/collation、BR-006 并发；同步 M0 测试范围 |
-| B `m1_catalog`（T08）                | ServiceProduct；D-01 批准后同时追加 Opportunity.expected_amount 可空列，不预设零/负值语义        | 唯一 code、状态、Decimal/边界检查；历史目录变更不影响后续快照                                                                |
-| C `m1_quotes`（T10）                 | Quote/Version/Item；依赖 A/B 与 D-01/02                                | 空/已有客户商机升级；版本/行序唯一、产品 FK、提交不可变的 Service 测试；不回填虚构接受证据                                   |
-| D `m1_orders`（T12）                 | Order/Item/PaymentTerm/Round/Decision；依赖 C 与 D-01～05              | 先把受批合同条款和快照结构一起前置，避免“有 submit 无条款表”；唯一性/引用链、审批并发和历史快照持久化                        |
-| E 按需追加（T03/T17）                | 仅评审证明确需的创建适配列、索引或纠正；不预先造文件                   | 既有数据先可空扩展→受控回填/核验→独立 Contract；不重写旧 SQL，不假设 down migration                                          |
+| 批次（将来由 Prisma 生成真实时间戳） | 内容与依赖                                                                                | SQL/兼容性验收                                                                                                               |
+| ------------------------------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| A `m1_crm`（T04）                    | Customer/Member/Contact/Opportunity/FollowUp；D-06/08 已批准；不含 expected_amount        | 既有 M0 仅增加必要反向关系；空库从 M0 起升级、历史 M0 数据升级保留；真实 FK/UK/NULL/collation、BR-006 并发；同步 M0 测试范围 |
+| B `m1_catalog`（T08）                | ServiceProduct；D-01 批准后同时追加 Opportunity.expected_amount 可空列，不预设零/负值语义 | 唯一 code、状态、Decimal/边界检查；历史目录变更不影响后续快照                                                                |
+| C `m1_quotes`（T10）                 | Quote/Version/Item；依赖 A/B 与 D-01/02                                                   | 空/已有客户商机升级；版本/行序唯一、产品 FK、提交不可变的 Service 测试；不回填虚构接受证据                                   |
+| D `m1_orders`（T12）                 | Order/Item/PaymentTerm/Round/Decision；依赖 C 与 D-01～05                                 | 先把受批合同条款和快照结构一起前置，避免“有 submit 无条款表”；唯一性/引用链、审批并发和历史快照持久化                        |
+| E 按需追加（T03/T17）                | 仅评审证明确需的创建适配列、索引或纠正；不预先造文件                                      | 既有数据先可空扩展→受控回填/核验→独立 Contract；不重写旧 SQL，不假设 down migration                                          |
 
 每批执行次序：明确契约→改 schema→在获准专用 dev/shadow 库 `migrate dev --create-only --name ...`→审查真实 SQL/锁风险/显式 collation→提交 schema+SQL+测试→在获准测试库应用。生产只 migrate deploy，且必须先备份并验证恢复。当前任务不运行这些命令、不建库、不编写时间戳 SQL。
 

@@ -10,6 +10,8 @@ export interface IdentityLockPlan {
   users: readonly UserLock[];
   roles: readonly bigint[];
   departments: readonly bigint[];
+  additionalRoles?: readonly bigint[];
+  exclusiveRoles?: readonly bigint[];
 }
 const sorted = (ids: readonly bigint[]) =>
   [...new Set(ids)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
@@ -23,6 +25,7 @@ export class WriteLockService {
     tx: Prisma.TransactionClient,
     identity: AccessIdentity,
     relatedUsers: readonly UserLock[] = [],
+    roleOptions: { additional?: readonly bigint[]; exclusive?: readonly bigint[] } = {},
   ): Promise<IdentityLockPlan> {
     const users = userLockPlan(identity.sub, relatedUsers);
     const memberships = await tx.userRole.findMany({
@@ -38,8 +41,16 @@ export class WriteLockService {
       throw new ApiException('SERVICE_UNAVAILABLE', 'Organization exceeds lock limit');
     return Object.freeze({
       users: Object.freeze(users.map((user) => Object.freeze(user))),
-      roles: Object.freeze(sorted(memberships.map(({ roleId }) => roleId))),
+      roles: Object.freeze(
+        sorted([
+          ...memberships.map(({ roleId }) => roleId),
+          ...(roleOptions.additional ?? []),
+          ...(roleOptions.exclusive ?? []),
+        ]),
+      ),
       departments: Object.freeze(sorted(departments.map(({ id }) => id))),
+      additionalRoles: Object.freeze(sorted(roleOptions.additional ?? [])),
+      exclusiveRoles: Object.freeze(sorted(roleOptions.exclusive ?? [])),
     });
   }
 
@@ -65,11 +76,19 @@ export class WriteLockService {
         await tx.$queryRaw`SELECT id FROM users WHERE id = ${BigInt(user.id)} FOR UPDATE`;
       else await tx.$queryRaw`SELECT id FROM users WHERE id = ${BigInt(user.id)} FOR SHARE`;
     }
-    for (const id of plan.roles)
-      await tx.$queryRaw`SELECT id FROM roles WHERE id = ${id} FOR SHARE`;
+    if ((plan.exclusiveRoles ?? []).some((id) => !plan.roles.includes(id)))
+      throw new TypeError('Exclusive roles must be part of the complete plan');
+    for (const id of plan.roles) {
+      if (plan.exclusiveRoles?.includes(id))
+        await tx.$queryRaw`SELECT id FROM roles WHERE id = ${id} FOR UPDATE`;
+      else await tx.$queryRaw`SELECT id FROM roles WHERE id = ${id} FOR SHARE`;
+    }
     for (const id of plan.departments)
       await tx.$queryRaw`SELECT id FROM departments WHERE id = ${id} FOR SHARE`;
-    const current = await this.plan(tx, identity, plan.users);
+    const current = await this.plan(tx, identity, plan.users, {
+      additional: plan.additionalRoles ?? [],
+      exclusive: plan.exclusiveRoles ?? [],
+    });
     if (
       String(current.roles) !== String(plan.roles) ||
       String(current.departments) !== String(plan.departments)

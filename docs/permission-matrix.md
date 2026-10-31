@@ -4,6 +4,8 @@
 
 2026-10-30 实现范围：M0 用户/角色/权限/部门读取接口已接入 RBAC，用户详情采用本人或 user:manage + IDENTITY 的对象级数据库过滤，详见 [授权实现与边界](authorization.md)。其余业务范围及授权写入规则仍是待接入、待验收的设计基线。
 
+2026-10-30 T01 更新：角色分配及账号停用已实现 §4.3 的最小写路径和真实 MySQL 验收，完整规则见 [T01 契约](t01-identity.md)。assign-roles 需 role:manage；业务角色增减、受保护账号角色调整另需另一负责人当前 role:grant_business；disable 需 user:manage，受保护账号另需另一负责人附加授权。普通业务员工停用不额外要求业务授予权。GET `/users/:id/access-state` 仅 user:manage 或 role:manage 与 IDENTITY 配对可读，返回 id/status/version/roleIds 以准备管理命令，不开放本人资料旁路。模板/权限/部门及通用用户编辑、恢复入口仍关闭；业务负责人不隐含 user:manage。
+
 ## 1. 默认角色
 
 - `system_admin` 系统管理员（仅用户、角色、系统配置，默认不具备财务审批权限）
@@ -155,7 +157,7 @@ role:grant_business 只由受保护的 business_owner 角色提供；该权限�
 
 ## 9. M1 接入约束（2026-10-30，DC-001）
 
-DC-001 的基线已经定义，但 M0 `permission.policy.ts` 只执行 user:manage、role:manage、department:read 三个映射；不能直接用它放行业务范围。M1 应新增固定销售范围 Policy 和写事务授权能力，继续复用 M0 身份校验；具体任务见 [M1 实施计划](plans/m1-implementation-plan.md)。
+DC-001 基线已在 T05 接入固定销售 Policy、真实 CRM SQL 范围及当前写授权/锁，继续复用 M0 身份校验，详见 [T05 实现与实库证据](t05-sales-access.md)。M0 `permission.policy.ts` 仍只执行 user:manage、role:manage、department:read 三个身份映射，不能拿它替代销售范围。CRM HTTP、D-07 交接资格和后续报价/订单业务仍须对应任务实现。
 
 | 操作组 | M1 允许的固定范围 | 必需的额外检查 |
 | --- | --- | --- |
@@ -191,6 +193,6 @@ SELF_COLLABORATOR 的两个分支必须区分：负责本人客户不等于协�
 
 ARCHIVED 客户及终态商机历史仍依当前客户 scope 可读，不因归档/终结变成公开或被隐式删除。归档不释放信用代码、不撤销读取、不取消历史订单；WON 不代替订单批准，LOST 不撤销订单。联系人正文只在受控读取返回；财务/交付不因本文获得销售跟进或完整联系人。写结果和幂等仅安全标量，日志/审计不存联系方式全文，审计查询仍按当前目标可见性。
 
-每次写和重放重新验证权威身份/动作/当前客户范围；原负责人/作者/创建者不保留越权访问。遵循用户→角色→部门→客户→已有订单（确实涉及时）→子记录；CRM 子记录跨类固定 Opportunity→CustomerContact→FollowUp，同类 ID 排序。主联系人切换、有效联系人≤100、归档与商机创建/状态、追加与终结在客户锁下串行，不逆序补身份锁；该锁表仍需 T05 实库验证。受控交接及目标资格保留 D-07/T09，不用 ordinary PATCH 绕过。
+每次写和重放重新验证权威身份/动作/当前客户范围；原负责人/作者/创建者不保留越权访问。遵循用户→角色→部门→客户→已有订单（确实涉及时）→子记录；CRM 子记录跨类固定 Opportunity→CustomerContact→FollowUp，同类 ID 排序。T05 已实库验证现有 CRM 的范围/锁、反向输入次序、归属/协作/角色/组织竞争及重放拒绝；完整表见 T05 记录。主联系人切换、有效联系人≤100、归档与商机创建/状态、追加与终结的业务实现和 HTTP 验收仍留 T06/T07，订单行锁留 T13。受控交接及目标资格保留 D-07/T09，不用 ordinary PATCH 绕过。
 
 验收覆盖：无 grant 403，不可见/父子错配 404，停用身份 401；TEAM 动态范围、同快照 where/count、客户移交/撤权与写入和重放竞争；隐藏候选不改变 hasMore；联系人/跟进正文不进入日志或幂等；状态禁止与职责权限分别测试。完整矩阵见 requirements §14.3 CRM-01～18。设计批准不表示这些测试已通过。

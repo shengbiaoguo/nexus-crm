@@ -1,4 +1,4 @@
-// M0 only. Physical names are snake_case; application properties are camelCase.
+// Physical names are snake_case; application properties are camelCase.
 generator client {
   provider            = "prisma-client"
   output              = "../src/generated/prisma"
@@ -40,24 +40,153 @@ enum AttemptStatus {
 }
 
 model User {
-  id                BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
-  loginName         String           @unique(map: "users_login_name_key") @map("login_name") @db.VarChar(100)
-  passwordHash      String           @map("password_hash") @db.VarChar(255)
-  name              String           @db.VarChar(100)
-  departmentId      BigInt?          @map("department_id") @db.UnsignedBigInt
-  status            RecordStatus     @default(ACTIVE)
-  credentialVersion Int              @default(1) @map("credential_version") @db.UnsignedInt
-  version           Int              @default(1) @db.UnsignedInt
-  createdAt         DateTime         @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt         DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
-  department        Department?      @relation(fields: [departmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  roles             UserRole[]
-  refreshSessions   RefreshSession[]
-  auditLogs         AuditLog[]
-  commandAttempts   CommandAttempt[]
+  id                   BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  loginName            String            @unique(map: "users_login_name_key") @map("login_name") @db.VarChar(100)
+  passwordHash         String            @map("password_hash") @db.VarChar(255)
+  name                 String            @db.VarChar(100)
+  departmentId         BigInt?           @map("department_id") @db.UnsignedBigInt
+  status               RecordStatus      @default(ACTIVE)
+  credentialVersion    Int               @default(1) @map("credential_version") @db.UnsignedInt
+  version              Int               @default(1) @db.UnsignedInt
+  createdAt            DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt            DateTime          @updatedAt @map("updated_at") @db.DateTime(3)
+  department           Department?       @relation(fields: [departmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  roles                UserRole[]
+  refreshSessions      RefreshSession[]
+  auditLogs            AuditLog[]
+  commandAttempts      CommandAttempt[]
+  ownedCustomers       Customer[]        @relation("CustomerOwner")
+  createdCustomers     Customer[]        @relation("CustomerCreator")
+  customerMembers      CustomerMember[]
+  createdContacts      CustomerContact[]
+  ownedOpportunities   Opportunity[]     @relation("OpportunityOwner")
+  createdOpportunities Opportunity[]     @relation("OpportunityCreator")
+  followUps            FollowUp[]
 
   @@index([departmentId, status], map: "users_department_status_idx")
   @@map("users")
+}
+
+enum CustomerStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum ContactStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum OpportunityStage {
+  NEW
+  QUALIFIED
+  NEGOTIATING
+  WON
+  LOST
+}
+
+model Customer {
+  id             BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  name           String            @db.VarChar(200)
+  normalizedName String            @map("normalized_name") @db.VarChar(200)
+  creditCode     String?           @unique(map: "customers_credit_code_key") @map("credit_code") @db.Char(18)
+  ownerId        BigInt            @map("owner_id") @db.UnsignedBigInt
+  status         CustomerStatus    @default(ACTIVE)
+  description    String?           @db.VarChar(2000)
+  version        Int               @default(1) @db.UnsignedInt
+  createdBy      BigInt            @map("created_by") @db.UnsignedBigInt
+  createdAt      DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime          @updatedAt @map("updated_at") @db.DateTime(3)
+  owner          User              @relation("CustomerOwner", fields: [ownerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  creator        User              @relation("CustomerCreator", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  members        CustomerMember[]
+  contacts       CustomerContact[]
+  opportunities  Opportunity[]
+
+  @@index([ownerId, status, createdAt, id], map: "customers_owner_status_time_idx")
+  @@index([normalizedName], map: "customers_normalized_name_idx")
+  @@map("customers")
+}
+
+model CustomerMember {
+  customerId BigInt   @map("customer_id") @db.UnsignedBigInt
+  userId     BigInt   @map("user_id") @db.UnsignedBigInt
+  createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([customerId, userId])
+  @@index([userId, customerId], map: "customer_members_user_customer_idx")
+  @@map("customer_members")
+}
+
+model CustomerContact {
+  id                BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  customerId        BigInt        @map("customer_id") @db.UnsignedBigInt
+  name              String        @db.VarChar(100)
+  title             String?       @db.VarChar(100)
+  phone             String?       @db.VarChar(40)
+  phoneNormalized   String?       @map("phone_normalized") @db.VarChar(21)
+  email             String?       @db.VarChar(254)
+  emailNormalized   String?       @map("email_normalized") @db.VarChar(254)
+  status            ContactStatus @default(ACTIVE)
+  isPrimary         Boolean       @default(false) @map("is_primary")
+  // SQL-owned generated column; never expose it in Prisma write inputs.
+  primaryCustomerId BigInt?       @unique(map: "customer_contacts_primary_customer_key") @default(dbgenerated()) @map("primary_customer_id") @ignore @db.UnsignedBigInt
+  version           Int           @default(1) @db.UnsignedInt
+  createdBy         BigInt        @map("created_by") @db.UnsignedBigInt
+  createdAt         DateTime      @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime      @updatedAt @map("updated_at") @db.DateTime(3)
+  customer          Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  creator           User          @relation(fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([customerId, createdAt, id], map: "customer_contacts_customer_time_idx")
+  @@index([phoneNormalized], map: "customer_contacts_phone_idx")
+  @@index([emailNormalized], map: "customer_contacts_email_idx")
+  @@map("customer_contacts")
+}
+
+model Opportunity {
+  id          BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  customerId  BigInt           @map("customer_id") @db.UnsignedBigInt
+  // Responsibility only; access always inherits the current customer scope.
+  ownerId     BigInt           @map("owner_id") @db.UnsignedBigInt
+  title       String           @db.VarChar(200)
+  description String?          @db.VarChar(2000)
+  stage       OpportunityStage @default(NEW)
+  closedAt    DateTime?        @map("closed_at") @db.DateTime(3)
+  closeReason String?          @map("close_reason") @db.VarChar(500)
+  version     Int              @default(1) @db.UnsignedInt
+  createdBy   BigInt           @map("created_by") @db.UnsignedBigInt
+  createdAt   DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
+  customer    Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  owner       User             @relation("OpportunityOwner", fields: [ownerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  creator     User             @relation("OpportunityCreator", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  followUps   FollowUp[]
+
+  @@index([customerId, stage, createdAt, id], map: "opportunities_customer_stage_time_idx")
+  @@index([ownerId, stage], map: "opportunities_owner_stage_idx")
+  @@map("opportunities")
+}
+
+model FollowUp {
+  id             BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
+  opportunityId  BigInt      @map("opportunity_id") @db.UnsignedBigInt
+  authorId       BigInt      @map("author_id") @db.UnsignedBigInt
+  content        String      @db.VarChar(4000)
+  nextFollowUpAt DateTime?   @map("next_follow_up_at") @db.DateTime(3)
+  correctionOfId BigInt?     @map("correction_of_id") @db.UnsignedBigInt
+  createdAt      DateTime    @default(now()) @map("created_at") @db.DateTime(3)
+  opportunity    Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  author         User        @relation(fields: [authorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  correctionOf   FollowUp?   @relation("FollowUpCorrection", fields: [correctionOfId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  corrections    FollowUp[]  @relation("FollowUpCorrection")
+
+  @@index([opportunityId, createdAt, id], map: "follow_ups_opportunity_time_idx")
+  @@index([authorId], map: "follow_ups_author_idx")
+  @@index([correctionOfId], map: "follow_ups_correction_idx")
+  @@map("follow_ups")
 }
 
 model Department {

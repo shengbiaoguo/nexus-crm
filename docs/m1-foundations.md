@@ -1,5 +1,7 @@
 # M1 前置基础能力补齐（2026-10-30）
 
+后续 T05 已完成真实 CRM SQL 范围与写锁，见 [T05](t05-sales-access.md)。下文保留最初无 CRM 表时的前置实现/夹具记录；T04 的五表现已落库，T05 使用真实 Customer/Member/Contact/Opportunity/FollowUp 验证，未以 User 投影代替新验收。当前导出的 SalesAccessService / SalesWriteService 及其边界、隔离级别断言和完整锁表以 T05 记录为准。
+
 本轮只扩展既有身份、授权、审计、幂等及受控运维入口。没有 Customer/Order 模型、业务 Controller、新数据库结构、Migration、额外依赖或 Redis 权威数据。现行 ADR-001/003/004/005 不变，ADR-002 仍为历史。
 
 ## 1. 销售对象授权
@@ -48,7 +50,7 @@ TEAM 使用当前 actor/owner 的 User.departmentId 和有效部门祖先关系�
 - 预写系统 STARTED，锁定受保护角色行串行化首次分配，然后同事务创建 User、UserRole、成功审计、attempt SUCCEEDED。新用户尚无既存行，角色锁后插入新行不是对既存用户的逆序加锁；后续成员调整仍从用户锁开始。
 - 两次并发初始化至多一次成功；审计失败回滚账号及授权。技术/提交未知保留 UNKNOWN，操作者先核对实际账号/审计，不自动创建第二个负责人。
 
-编译后调用 `pnpm identity:bootstrap --initialize-business-owner`，标准输入由受控秘密通道传入。本文不提供含真实密码的 shell 示例，也不自动执行此命令。后续 assign-roles/disable、受保护模板编辑、自授/最后负责人管理仍未开放，不将 Bootstrap 冒充完整身份管理。
+编译后调用 `pnpm identity:bootstrap --initialize-business-owner`，标准输入由受控秘密通道传入。本文不提供含真实密码的 shell 示例，也不自动执行此命令。T01 后另增加显式 `--create-unassigned-user` 模式，只创建新无角色员工，不覆盖/恢复账号；角色必须经受控 HTTP 分配。assign-roles/disable 和管理状态读取已完成，详见 [T01 契约与证据](t01-identity.md)；受保护模板编辑、通用身份 CRUD 及恢复仍未开放，不将本轮最小路径冒充完整身份管理。
 
 ## 4. 命令尝试核对入口
 

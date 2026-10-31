@@ -13,12 +13,13 @@ export class AppModule {
   static register(environment: Environment) {
     const database = DatabaseModule.register(environment.DATABASE_URL);
     const authentication = AuthModule.register(environment, database);
+    const commands = IdempotencyModule.register(database, environment.DATABASE_URL);
     return {
       module: AppModule,
       imports: [
         authentication,
-        AuthorizationModule.register(database, authentication),
-        IdempotencyModule.register(database, environment.DATABASE_URL),
+        AuthorizationModule.register(database, authentication, commands),
+        commands,
       ],
     };
   }

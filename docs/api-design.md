@@ -8,6 +8,8 @@
 
 ## 1. API 基本规范
 
+2026-10-30 T05 实现注记：固定销售授权已接入真实 CRM 的内部 SQL where/list/count/详情摘要和写锁协调，见 [T05 契约](t05-sales-access.md)。不新增本节以下的 CRM 路由或传输 DTO；T06/T07 必须在这些内部能力上接入 HTTP、字段投影、业务状态/版本及职责分离，不能将授权通过视为完成业务校验。报价/订单真实来源链和共享订单行锁仍待对应持久化及 T13。
+
 ### 1.1 基础与版本
 
 - Base URL: `/api/v1`；TLS/HTTPS 必需（本地开发除外）；JSON 使用 `application/json; charset=utf-8`。
@@ -101,7 +103,11 @@ HTTP 状态码真实表达结果；不要把所有错误包装成 200。统一�
 
 2026-10-30 认证实现注记：JWT + Refresh Token 的四个认证端点已实现，DTO、有效期、错误与边界见 [认证契约](authentication.md)。其他接口的实现范围以以下 RBAC 注记为准。
 
-2026-10-30 RBAC 实现注记：本次另实现 GET `/users`、`/users/:id`、`/roles`、`/permissions`、`/departments` 的 M0 读取授权。权限配对、对象范围、分页和字段投影见 [授权契约](authorization.md)。用户/角色写接口及其他业务模块仍未开放。
+2026-10-30 RBAC 实现注记：已实现 GET `/users`、`/users/:id`、`/roles`、`/permissions`、`/departments` 的 M0 读取授权。权限配对、对象范围、分页和字段投影见 [授权契约](authorization.md)。T01 后另开放下述最小身份管理配套；其他用户/角色编辑及业务模块仍按各任务门禁保持关闭。
+
+2026-10-30 T01：已实现 POST `/users/:id/assign-roles`、`/users/:id/disable`，均要求 UUID 幂等 Key、expectedVersion 和 reason。assign-roles 以至多 100 个唯一字符串 roleIds 完整替换角色集合，空集合移除全部；业务角色增减还需另一受保护负责人的当前 role:grant_business。disable 原子递增 credential_version 并撤销全部刷新会话；受保护账号须另一负责人及 user:manage。两个命令返回 200 `{id,status,version}`，遵循当前授权重验、版本、审计及 ADR-003/005。
+
+GET `/users/:id/access-state` 是这两个版本化命令的最小读取配套：user:manage 或 role:manage + IDENTITY，同快照返回 `{id,status,version,roleIds}`，无幂等 Key、无登录资料/密码/凭证版本/会话；原 GET 用户资料白名单保持不变。DTO、错误、资源上限、保护和实测结果见 [T01 契约](t01-identity.md)。此为既有身份管理动作的技术细化，未新增业务授权范围；不开放用户通用 POST/PATCH、部门或角色模板编辑、恢复入口。
 
 | Method | Path | 用途 | P / 备注 |
 |---|---|---|---|
@@ -112,6 +118,7 @@ HTTP 状态码真实表达结果；不要把所有错误包装成 200。统一�
 | GET | `/auth/me` | 当前身份、权限摘要 | 认证有效 |
 | GET | `/users` | 用户列表 | `user:manage` |
 | POST | `/users` | 创建员工账号 | `user:manage` |
+| GET | `/users/:id/access-state` | T01 管理命令所需版本、状态及角色 ID | `user:manage` 或 `role:manage`，各自与 IDENTITY 配对 |
 | GET | `/users/:id` | 查询员工 | `user:manage` 或本人受限资料 |
 | PATCH | `/users/:id` | 修改员工非敏感字段 | `user:manage` |
 | POST | `/users/:id/disable` | 停用员工并撤销会话 | `user:manage`，幂等命令 |

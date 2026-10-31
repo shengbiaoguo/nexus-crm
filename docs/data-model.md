@@ -59,7 +59,7 @@ erDiagram
 | Identity | `role_permissions` | `role_id`, `permission_id`, `scope_code` | `UNIQUE(role_id, permission_id)`；动作和固定范围成对求值，禁止跨角色拼接 |
 | Identity | `refresh_sessions` | `user_id`, `token_hash`, `expires_at`, `revoked_at` | `UNIQUE(token_hash)`；仅存令牌哈希 |
 | CRM | `customers` | `name`, `normalized_name`, `credit_code`, `owner_id`, `status`, `version` | 对非 NULL 规范化信用代码设唯一索引；`INDEX(owner_id,status)`；名称非唯一 |
-| CRM | `customer_members` | `customer_id`, `user_id`, `member_role` | `UNIQUE(customer_id,user_id)`；协作成员与主负责人单独表达 |
+| CRM | `customer_members` | `customer_id`, `user_id`, `created_at` | `PRIMARY KEY(customer_id,user_id)`；协作成员与主负责人单独表达；member_role 未定不落库 |
 | CRM | `customer_contacts` | `customer_id`, `name`, `title?`, `phone?`, `email?`, 派生匹配键、`status`, `is_primary`, `version` | 有效联系人最多 100；至多一个有效主联系人，生成可空客户键 UNIQUE；见 §12 |
 | CRM | `opportunities` | `customer_id`, `owner_id`, `title`, `description?`, `stage`, `close_reason?`, `closed_at?` | `INDEX(customer_id,stage)`, `INDEX(owner_id,stage)`；expected_amount 等 D-01 后批次 B 扩展 |
 | CRM | `follow_ups` | 必填 `opportunity_id`, `author_id`, `content`, `next_follow_up_at?`, `correction_of_id?` | `INDEX(opportunity_id,created_at,id)`；客户从商机推导；只追加，作者历史保留 |
@@ -233,7 +233,7 @@ M0 的两份迁移已经存在；下一步只按已确认的 M1 契约分批扩�
 
 ## 12. D-06 / D-08 已批准 CRM 物理设计契约
 
-2026-10-30 业务负责人批准，业务依据见 [requirements §14](requirements.md) 和 [批准记录](decisions/m1-d06-d08-proposal.md)。本节收敛 §3/§11 的 CRM 候选，不改历史 Migration，不代表 Schema 已实现。
+2026-10-30 业务负责人批准，业务依据见 [requirements §14](requirements.md) 和 [批准记录](decisions/m1-d06-d08-proposal.md)。本节收敛 §3/§11 的 CRM 候选；T04 已落实批次 A Schema / Migration，执行证据见 [T04 记录](t04-persistence.md)，不代表业务接口已实现。
 
 ### 12.1 字段与共通物理规则
 
@@ -296,8 +296,22 @@ Customer、CustomerContact、Opportunity 共用 BIGINT UNSIGNED id/FK、UNSIGNED
 - Opportunity 保留 (customer_id,stage,created_at,id)、(owner_id,stage)；三个进行中阶段 closed_at/close_reason 均为空，WON/LOST 两者均非空。主客户不可变，owner 仅责任。归档客户无进行中商机；归档、商机创建及阶段变化经同一客户锁。
 - expectedAmount 是未来可空 Decimal(18,2) 候选，**T04 批次 A 不建列、不开放 DTO**；D-01 明确金额语义后在批次 B 追加。不得默认 0 或用浮点。
 - FollowUp.opportunityId 必填，不冗余 customer_id；correctionOfId 是可空自引用 FK，建相应反向索引；服务端保证同商机、只指已有记录，保留原文且不形成覆盖。next_follow_up_at 可空，首次新增时必须为未来 UTC；终态仅允许 null。
-- CRM 同时锁多类子记录时固定 Opportunity→CustomerContact→FollowUp，同类按 ID；先遵循用户→角色→部门→客户→已有订单（确实涉及时）协议。T05/T13 仍须实库锁竞争验收，不能将文档当作实现证明。
+- CRM 同时锁多类子记录时固定 Opportunity→CustomerContact→FollowUp，同类按 ID；先遵循用户→角色→部门→客户→已有订单（确实涉及时）协议。T05 已完成现有 CRM 真实行锁及固定顺序验收，证据见 [T05](t05-sales-access.md)；订单行与后续跨表接入仍须 T13 实库验证，不执行缺表 SQL 或造空锁实现。
 
 ### 12.3 T04 迁移及验收边界
 
-批次 A 仍为 Customer/Member/Contact/Opportunity/FollowUp 五个既有候选，增加上述最小字段、主联系人辅助列与跟进自引用，不新增业务模块。必须审查真实 Prisma Migration SQL，校验 FK/UK/CHECK/索引、NULL、collation、并发信用代码与主联系人、历史 actor/checksum；在获准空库及历史 M0 库升级并保留 M0 精确子集+当前全清单。生成列兼容性为 T04 技术验证，不是未决业务语义。完整验收用例见 requirements §14.3 与批准记录 §2.7/§3.10；本轮未生成或执行迁移。
+批次 A 仍为 Customer/Member/Contact/Opportunity/FollowUp 五个既有候选，增加上述最小字段、主联系人辅助列与跟进自引用，不新增业务模块。必须审查真实 Prisma Migration SQL，校验 FK/UK/CHECK/索引、NULL、collation、并发信用代码与主联系人、历史 actor/checksum；在获准空库及历史 M0 库升级并保留 M0 精确子集+当前全清单。生成列兼容性为 T04 技术验证，不是未决业务语义。完整验收用例见 requirements §14.3 与批准记录 §2.7/§3.10；批准文档同步时未生成迁移，T04 的最终实现与验证见下节及执行记录。
+
+### 12.4 T04 最终数据库约束（2026-10-30）
+
+`20261030090155_m1_crm` 增加五表、12 个 FK，全部 ON DELETE / UPDATE RESTRICT；M0 表与两份历史迁移不变。CustomerMember 采用 `(customer_id,user_id)` 复合主键及反向索引；候选 `member_role` 无已批准枚举/独立语义，A 不添加此列，也不猜测 D-07 资格、上限或跨表 owner 排除约束。
+
+- `customers_credit_code_key`：可空 CHAR(18) 全库唯一，包含归档客户，允许多个 NULL；`customers_credit_code_check` 限非空值为 18 位 ASCII 大写字母/数字。名称仅非唯一检索索引。
+- `customer_contacts.primary_customer_id`：BIGINT UNSIGNED `GENERATED ALWAYS AS (CASE WHEN is_primary = 1 THEN customer_id ELSE NULL END) STORED`，加 `customer_contacts_primary_customer_key` 唯一索引。`customer_contacts_primary_check` 限布尔值 0/1、INACTIVE 不为主；`customer_contacts_reachability_check` 要求 ACTIVE 至少有非空 phone/email。
+- Prisma 将辅助列映射为 `BigInt? @default(dbgenerated()) @ignore @db.UnsignedBigInt` 并保留 unique；生成客户端不暴露此列的读写属性。SQL 独占管理生成表达式；客户端插入/切换、并发唯一性、实库 schema diff 均已验证。后续迁移仍须审查实际生成列与 CHECK，不能仅凭 Prisma diff 空认定这些约束存在。
+- `opportunities_closure_check`：三个进行中阶段的 closed_at/close_reason 都为 NULL；WON/LOST 两者非空且原因 trim 后非空。expected_amount 不建列；owner 不构成授权。
+- FollowUp 仅创建时间、作者及内容等追加记录字段；correction_of_id 可空自引用 FK、反向索引，原文保留。没有 updated_at/version，也没有本任务新增的编辑/删除入口。数据库 FK 不替代后续 Service 对同商机、已有且非自身引用、追加不可变、终态计划时间的校验；不引入触发器或业务 Service。
+
+所有五表显式 utf8mb4 / utf8mb4_0900_ai_ci，ID/FK 无符号 BIGINT，时间 DATETIME(3)，三个可变实体的 version 为 UNSIGNED INT DEFAULT 1。字段长度、完整索引、精确 FK 目标、主联系人生成表达式及三份 migration checksum 有实库测试；完整清单为 15 个应用表、22 个 FK、6 个 CHECK。客户锁下主联系人替换/100 人上限、信用代码不可清空、归档/赢单、派生值维护和权限业务行为仍由 T05～T07 接入，本次不宣称通过其 HTTP 验收。
+
+T05 后续实现注记：本节表结构未变，无新增 Migration。固定客户范围已实际用于 Customer/Opportunity 的 SQL 列表、count 与摘要详情，以及联系人/跟进的真实父链；当前身份→客户→CRM 子记录的 ReadCommitted 写锁协调和组织/成员/归属重验已完成，详见 T05 记录。主联系人替换、数量、归档/赢单、字段归一化等领域行为与 HTTP 仍由 T06/T07 完成，不以锁基础的测试代替业务验收。
